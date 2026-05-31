@@ -55,8 +55,9 @@ def scrape_price_from_ft(identifier: str) -> float:
                 
                 parsed_price = float(raw_price)
                 
-                # Smart Scale Check: Convert raw pence metrics cleanly back to Pounds
-                if parsed_price > 25.0:
+                # FIXED SMART SCALE CHECK: UK funds in pence are virtually always > 250p (e.g. 705p).
+                # Funds priced directly in Pounds sit below this line (e.g., Vanguard at 124.07 or Artemis at 1.10).
+                if parsed_price > 250.0:
                     return round(parsed_price / 100.0, 4)
                 else:
                     return round(parsed_price, 4)
@@ -74,12 +75,10 @@ def get_asset_metrics(item: dict) -> dict:
     
     ft_price = None
     
-    # Pathway A: Prioritize using the permanent global ISIN string
     if isin_code:
         print(f"   -> [Scraper Engine]: Querying via ISIN for: {asset_name} ({isin_code})")
         ft_price = scrape_price_from_ft(isin_code)
         
-    # Pathway B: Ticker Backup Fallback
     if not ft_price and ticker_symbol:
         clean_ticker = ticker_symbol.split('.')[0]
         print(f"   --> [Ticker Retry]: ISIN failed. Querying via Ticker: {clean_ticker}")
@@ -96,7 +95,7 @@ def get_asset_metrics(item: dict) -> dict:
             "source": "Financial Times Scraper"
         }
             
-    print(f"   ❌ [Data Block]: All scraping paths failed for: {asset_name}")
+    print(f"    [Data Block]: All scraping paths failed for: {asset_name}")
     return {
         "name": asset_name,
         "ticker": ticker_symbol,
@@ -138,7 +137,7 @@ def run_financial_agent():
         f"Output everything in a beautifully structured markdown report."
     )
     
-    print("\n🚀 [Agent Initialization]: Spinning up reasoning engine loop...")
+    print("\n [Agent Initialization]: Spinning up reasoning engine loop...")
     
     try:
         chat = client.chats.create(
@@ -161,10 +160,10 @@ def run_financial_agent():
         with open(f"reports/balancing_report_{timestamp}.md", "w") as out_file:
             out_file.write(report_content)
             
-        print(f"💾 [System Success]: Report archived safely to reports/balancing_report_{timestamp}.md")
+        print(f" [System Success]: Report archived safely to reports/balancing_report_{timestamp}.md")
         
     except Exception as e:
-        print(f"\n❌ [Critical Engine Failure]: Framework loop crashed: {str(e)}")
+        print(f"\n [Critical Engine Failure]: Framework loop crashed: {str(e)}")
 
 if __name__ == "__main__":
     run_financial_agent()
