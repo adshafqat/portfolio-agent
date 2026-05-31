@@ -1,0 +1,8 @@
+{
+  "cash_balance_usd": 12500.00,
+  "holdings": [
+    {"ticker": "AAPL", "shares_owned": 15},
+    {"ticker": "TSLA", "shares_owned": 8},
+    {"ticker": "MSFT", "shares_owned": 5}
+  ]
+}
