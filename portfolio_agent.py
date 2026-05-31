@@ -116,7 +116,6 @@ def run_financial_agent():
         "- L&G All StocksGblGvBdIdx Tst I Acc\n"
         "- Vanguard UKLngDurGiltIdx A AE\n"
         "- Aviva Inv UK Listed Eq Inc 2 Acc\n"
-        "- Liontrust Spl Sits I Inc\n"
         "- Ninety One UK Focsh I Acc\n"
         "- Royal London UK Equity Inc M Acc\n"
         "- Baillie Gifford International B Acc\n"
