@@ -1,8 +1,8 @@
 {
   "cash_balance_gbp": 6049.62,
   "holdings": [
-    {"isin": "GB00B4M9Y724", "ticker": "0P00014H4E.L", "name": "Artemis Strategic Assets I Acc", "shares_owned": 23259.2360},
-    {"isin": "GB00B2Q6HW61", "ticker": "0P0000W278.L", "name": "Fundsmith Equity I Acc", "shares_owned": 385.5400},
+    {"isin": "GB00B3VDD431", "ticker": "0P00014H4E.L", "name": "Artemis Strategic Assets I Acc", "shares_owned": 23259.2360},
+    {"isin": "GB00B41YBW71", "ticker": "0P0000W278.L", "name": "Fundsmith Equity I Acc", "shares_owned": 385.5400},
     {"ticker": "VGOV.L", "name": "Vanguard UKLngDurGiltIdx A AE", "shares_owned": 6.8443}
   ]
 }
