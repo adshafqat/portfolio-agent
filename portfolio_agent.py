@@ -100,7 +100,7 @@ def run_financial_agent():
         f"Output everything in a structured markdown report."
     )
 
-    
+
     print("🚀 [Agent Initialization]: Spinning up reasoning engine loop...")
     
     try:
