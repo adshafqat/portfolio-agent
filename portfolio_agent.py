@@ -86,15 +86,15 @@ def run_financial_agent():
     
     user_prompt = (
         f"Review my current holdings and cash position from my portfolio data: {portfolio_snapshot}. "
-        f"1. Use get_stock_metrics to get live market metrics for AAPL, TSLA, and MSFT.\n"
+        f"1. Use get_stock_metrics to get live market metrics for each ticker listed.\n"
         f"2. Present the current data cleanly in a markdown table.\n"
-        f"3. Provide 3 highly specific, actionable options for deploying the cash balance of exactly "
-        f"${portfolio_snapshot['cash_balance_usd']:,} into my current holdings based on their performance.\n"
-        f"   - Each option must calculate the EXACT number of whole shares to purchase based on the live price pulled, "
-        f"the total cost of those shares, and the remaining cash balance left over.\n"
-        f"   - Option A: Balanced Allocation (split cash relatively evenly among all three holdings).\n"
-        f"   - Option B: Momentum Allocation (tilt heavily toward the stock furthest above its 50-day average).\n"
-        f"   - Option C: Value/Room-to-Grow Allocation (tilt heavily toward the stock with the most room below its 3-month peak).\n"
+        f"3. Provide 3 shighly specific, actionable options for deploying the cash balance of exactly "
+        f"£{portfolio_snapshot['cash_balance_gbp']:,} into my current holdings based on their performance.\n"
+        f"   - Each option must calculate the EXACT number of whole shares/units to purchase based on the live price pulled, "
+        f"the total cost of those units, and the remaining cash balance left over.\n"
+        f"   - Option A: Balanced Allocation (split cash relatively evenly among active holdings).\n"
+        f"   - Option B: Momentum Allocation (tilt heavily toward the assets furthest above their 50-day average).\n"
+        f"   - Option C: Value/Room-to-Grow Allocation (tilt heavily toward the assets with the most room below their 3-month peak).\n"
         f"Output everything in a structured markdown report."
     )
     

@@ -1,8 +1,28 @@
 {
-  "cash_balance_usd": 12500.00,
+  "cash_balance_gbp": 6049.62,
   "holdings": [
-    {"ticker": "AAPL", "shares_owned": 15},
-    {"ticker": "TSLA", "shares_owned": 8},
-    {"ticker": "MSFT", "shares_owned": 5}
+    {"ticker": "0P00014H4E.L", "name": "Artemis Strategic Assets I Acc", "shares_owned": 23259.24},
+    {"ticker": "0P0000W3AG.L", "name": "Fidelity MoneyBuilder Income W Acc GBP", "shares_owned": 115.48},
+    {"ticker": "0P0000X67B.L", "name": "iShares Overseas Corporate Bond Index (UK) D Acc", "shares_owned": 832.58},
+    {"ticker": "0P00013X12.L", "name": "Janus Henderson Fixed Interest Monthly Income A Inc", "shares_owned": 943.25},
+    {"ticker": "0P0000XYS1.L", "name": "L&G All Stocks Gilt Index Trust I Acc", "shares_owned": 625.16},
+    {"ticker": "VGOV.L", "name": "Vanguard UK Long Duration Gilt Index Fund A Acc", "shares_owned": 6.84},
+    {"ticker": "0P0000WCH7.L", "name": "Aviva Investors UK Listed Equity Income 2 Acc", "shares_owned": 185.58},
+    {"ticker": "0P0000W70G.L", "name": "Liontrust Special Situations I Inc", "shares_owned": 592.58},
+    {"ticker": "0P0000X8G0.L", "name": "Ninety One UK Franchise I Acc", "shares_owned": 317.94},
+    {"ticker": "0P0000W8BW.L", "name": "Royal London UK Equity Income M Acc", "shares_owned": 919.66},
+    {"ticker": "0P0000ZWCO.L", "name": "Artemis SmartGARP UK Equity I Acc", "shares_owned": 111.29},
+    {"ticker": "0P0000W89P.L", "name": "Baillie Gifford International B Acc", "shares_owned": 4.96},
+    {"ticker": "0P0000XBJD.L", "name": "BlackRock Continental European D Inc", "shares_owned": 192.65},
+    {"ticker": "0P0000WG64.L", "name": "BNY Mellon Global Income Inst W Acc GBP", "shares_owned": 1468.02},
+    {"ticker": "0P0000WG6E.L", "name": "BNY Mellon Global Income Inst W Inc GBP", "shares_owned": 40.72},
+    {"ticker": "0P0000W278.L", "name": "Fundsmith Equity I Acc", "shares_owned": 385.54},
+    {"ticker": "0P0000XYSY.L", "name": "HSBC American Index C Acc", "shares_owned": 595.42},
+    {"ticker": "0P0000W850.L", "name": "JPM US Select C Acc", "shares_owned": 427.29},
+    {"ticker": "0P0000X8GZ.L", "name": "Jupiter Japan Income I Acc", "shares_owned": 495.89},
+    {"ticker": "0P00015LDT.L", "name": "Fidelity ASI W A", "shares_owned": 208.52},
+    {"ticker": "0P0000X8AK.L", "name": "L&G Property Feeder Fund I Acc", "shares_owned": 2906.90},
+    {"ticker": "0P0000WG8S.L", "name": "BNY Mellon Real Return I W Acc", "shares_owned": 779.58},
+    {"ticker": "0P0000W70G.L", "name": "Liontrust Special Situations I Acc", "shares_owned": 378.16}
   ]
 }
