@@ -1,74 +1,59 @@
 import os
 import json
 import time
-import yfinance as yf
-from datetime import datetime, timedelta
+import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-# Load API key and environment
 load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 MODEL_ID = "gemini-2.5-flash"
 JSON_FILE = "portfolio.json"
 
-def get_price_on_date(ticker_symbol, target_date):
-    """Fetches historical close price via yfinance."""
-    try:
-        ticker = yf.Ticker(ticker_symbol)
-        date_obj = datetime.strptime(target_date, "%Y-%m-%d")
-        # Look in a window to handle weekends/holidays
-        start_date = (date_obj - timedelta(days=2)).strftime("%Y-%m-%d")
-        end_date = (date_obj + timedelta(days=5)).strftime("%Y-%m-%d")
-        
-        hist = ticker.history(start=start_date, end=end_date)
-        if not hist.empty:
-            return float(hist['Close'].iloc[0])
-    except Exception as e:
-        print(f"   ⚠️ Error fetching {ticker_symbol}: {e}")
+def scrape_live_price(identifier: str) -> float:
+    """Scrapes the live market price from the FT tearsheet page."""
+    for extension in [":GBX", ":GBP"]:
+        url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={identifier}{extension}"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                # FT summary page target for live price
+                price_el = soup.find("span", class_="mod-ui-data-list__value")
+                if price_el:
+                    return float(price_el.text.strip().replace(",", ""))
+        except:
+            continue
     return None
 
-def run_historical_analysis():
+def run_live_analysis():
     with open(JSON_FILE, 'r') as f:
         config = json.load(f)
-        
-    dates = config.get("comparison_dates", {})
-    leaderboard = []
     
-    print(f"⏳ Fetching market data: {dates['date_a']} ➡️ {dates['date_b']}...")
+    holdings_snapshot = []
+    print(f"⏳ Refreshing live market prices for {len(config['holdings'])} holdings...")
     
     for item in config["holdings"]:
-        ticker = item.get("ticker")
-        if not ticker: continue
-        
-        p1 = get_price_on_date(ticker, dates['date_a'])
-        p2 = get_price_on_date(ticker, dates['date_b'])
-        
-        if p1 and p2:
-            pa = p1 / 100.0 if item["is_pence"] else p1
-            pb = p2 / 100.0 if item["is_pence"] else p2
-            
-            growth = ((pb - pa) / pa) * 100
-            
-            leaderboard.append({
+        raw_price = scrape_live_price(item["isin"])
+        if raw_price:
+            price = raw_price / 100.0 if item["is_pence"] else raw_price
+            current_val = round(item["shares_owned"] * price, 2)
+            holdings_snapshot.append({
                 "name": item["name"],
-                "growth": round(growth, 2),
-                "val_b": round(item["shares_owned"] * pb, 2)
+                "price": price,
+                "current_value": current_val
             })
-            print(f"   📊 {item['name']}: {round(growth, 2)}% growth")
-        
+            print(f"   📊 {item['name']}: £{price:,.4f}")
         time.sleep(0.5)
 
-    leaderboard.sort(key=lambda x: x["growth"], reverse=True)
+    # Send to AI for allocation strategy
+    prompt = f"Portfolio snapshot: {json.dumps(holdings_snapshot)}. Recommend how to allocate cash balance of £{config['cash_balance_gbp']} based on current values."
     
-    prompt = f"Portfolio growth data: {json.dumps(leaderboard)}. Recommend allocation for £{config['cash_balance_gbp']} into top 3 funds."
-    
-    response = client.models.generate_content(
-        model=MODEL_ID, 
-        contents=prompt
-    )
-    print("\n=== STRATEGY ===\n", response.text)
+    response = client.models.generate_content(model=MODEL_ID, contents=prompt)
+    print("\n=== LIVE PORTFOLIO STRATEGY ===\n", response.text)
 
 if __name__ == "__main__":
-    run_historical_analysis()
+    run_live_analysis()
