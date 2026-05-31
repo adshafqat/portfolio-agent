@@ -31,7 +31,7 @@ def scrape_price_from_ft(isin: str) -> float:
     """Scrapes the live fund price directly from Financial Times (FT.com) using its ISIN.
     
     Uses resilient multi-selector fallback logic to account for varying page structures
-    between regular mutual funds, OEICs, and investment trusts.
+    and includes a smart currency filter to prevent Pence-vs-Pound math errors.
     """
     url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={isin}"
     headers = {
@@ -63,9 +63,15 @@ def scrape_price_from_ft(isin: str) -> float:
             # Clear out raw string suffix labels if present (e.g., 'GBX' or 'p')
             raw_price = raw_price.lower().replace("gbx", "").replace("p", "").strip()
             
-            # UK Mutual funds on FT are quoted in PENCE. 
-            # Convert pence to pounds (£) to match your JSON data format.
-            return round(float(raw_price) / 100.0, 4)
+            parsed_price = float(raw_price)
+            
+            # Smart Scale Check: UK mutual funds on FT are often quoted in raw PENCE (e.g., 705.0p).
+            # If the number is large (> 15.0), we divide by 100 to scale it down to standard pounds (£7.05).
+            # If it's already a small decimal (e.g., 1.09 or 7.05), we use it exactly as is.
+            if parsed_price > 15.0:
+                return round(parsed_price / 100.0, 4)
+            else:
+                return round(parsed_price, 4)
             
     except Exception as e:
         print(f"      [Scrape Error]: Failed to parse HTML content for ISIN {isin}: {e}")
