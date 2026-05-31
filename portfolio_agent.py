@@ -110,12 +110,31 @@ def run_financial_agent():
         resolved_metrics.append(metrics)
         time.sleep(0.5)
 
-    system_instruction = (
+system_instruction = (
         "You are an expert personal financial optimization agent. Your objective is to look at a "
         "user's asset balance data, review current pricing performance metrics, and compile "
-        "a highly objective investment balancing report. You must calculate the current value of each "
-        "holding by multiplying Shares Owned by Current Price exactly, and sum them precisely along with "
-        "the cash balance to find the true Total Portfolio Value. Do not alter, shift decimals, or try to correct the input numbers."
+        "a highly objective investment balancing report.\n\n"
+        "CRITICAL CURRENCY CONFIGURATION:\n"
+        "The following funds are quoted by the scraper engine in PENCE (GBX). You MUST divide their "
+        "current_live_price by 100 to convert them to GBP before calculating Current Value:\n"
+        "- Fidelity MnyBldCrpBd W Acc GBP\n"
+        "- iShares Osea GovBdIdx(UK) D A\n"
+        "- Janus Henderson FxdIntMthIn I A\n"
+        "- L&G All StocksGblGvBdIdx Tst I Acc\n"
+        "- Vanguard UKLngDurGiltIdx A AE\n"
+        "- Aviva Inv UK Listed Eq Inc 2 Acc\n"
+        "- Liontrust Spl Sits I Inc\n"
+        "- Ninety One UK Focsh I Acc\n"
+        "- Royal London UK Equity Inc M Acc\n"
+        "- Baillie Gifford International B Acc\n"
+        "- BlackRock Cntl European D Inc\n"
+        "- Jupiter Japan Income I Acc\n"
+        "- Fidelity ASI W A\n"
+        "- L&G ProptyFeedr I AE\n"
+        "- Liontrust Spl Sits I Acc\n\n"
+        "All other funds (like Artemis, Fundsmith, HSBC, BNY Mellon, JPM) are already in GBP (£) and do not need division.\n"
+        "Calculate the current value of each holding by multiplying Shares Owned by the calculated GBP Price exactly, "
+        "and sum them precisely along with the cash balance to find the true Total Portfolio Value."
     )
     
     user_prompt = (
