@@ -8,52 +8,73 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-# Workaround for local environments with strict certificate validation issues
 try:
     ssl._create_default_https_context = ssl._create_unverified_context
 except AttributeError:
     pass
 
-# Initialize Environment and Google GenAI Engine
 load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 MODEL_ID = "gemini-2.5-flash"
 JSON_FILE = "portfolio.json"
 
 def load_portfolio_config():
-    """Reads the configuration and complete asset registry from the JSON file."""
     with open(JSON_FILE, 'r') as f:
         return json.load(f)
 
-def scrape_historical_price(identifier: str, target_date: str) -> float:
+def scrape_historical_price_with_session(session, identifier: str, target_date: str) -> float:
     """
-    Submits a targeted POST request to the Financial Times database engine 
-    to retrieve the exact closing price for an individual date.
+    First executes a GET request to harvest dynamic form tracking state, 
+    then POSTs the date filter parameters to extract the true historical price.
     """
     formatted_date = target_date.replace("-", "/")
     
-    # Financial Times tracks historical funds using either :GBX or :GBP modifiers
     for extension in [":GBX", ":GBP"]:
         url = f"https://markets.ft.com/data/funds/tearsheet/historical?s={identifier}{extension}"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        payload = {
-            'historicalForm-dateFrom': formatted_date,
-            'historicalForm-dateTo': formatted_date,
-            'historicalForm-submit': 'Update'
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': url
         }
         try:
-            response = requests.post(url, headers=headers, data=payload, timeout=10)
-            if response.status_code != 200:
+            # Step 1: Establish context and pull down the hidden CSRF/Form state tokens
+            get_response = session.get(url, headers=headers, timeout=10)
+            if get_response.status_code != 200:
                 continue
                 
-            soup = BeautifulSoup(response.text, 'html.parser')
-            data_table = soup.find("table", class_="mod-ui-table")
+            soup_get = BeautifulSoup(get_response.text, 'html.parser')
+            
+            # Locate the historical form tracking tokens
+            form = soup_get.find("form", id="historicalForm")
+            if not form:
+                # Fallback to general input search if form ID names slightly deviate
+                form = soup_get.find("form")
+                
+            # Build payload starting with all default hidden fields found on the page
+            payload = {}
+            if form:
+                for hidden_input in form.find_all("input", type="hidden"):
+                    if hidden_input.get("name"):
+                        payload[hidden_input["name"]] = hidden_input.get("value", "")
+            
+            # Step 2: Inject your target dates into the payload fields
+            payload.update({
+                'historicalForm-dateFrom': formatted_date,
+                'historicalForm-dateTo': formatted_date,
+                'historicalForm-submit': 'Update'
+            })
+            
+            # Step 3: Post the validated payload back to the server
+            post_response = session.post(url, headers=headers, data=payload, timeout=10)
+            if post_response.status_code != 200:
+                continue
+                
+            soup_post = BeautifulSoup(post_response.text, 'html.parser')
+            data_table = soup_post.find("table", class_="mod-ui-table")
             if data_table:
                 rows = data_table.find_all("tr")
                 if len(rows) > 1:
                     cells = rows[1].find_all("td")
                     if cells:
-                        # Extract and clean closing price (column index 4)
                         close_price_text = cells[4].text.strip().replace(",", "")
                         return round(float(close_price_text), 4)
         except Exception:
@@ -61,7 +82,6 @@ def scrape_historical_price(identifier: str, target_date: str) -> float:
     return None
 
 def run_historical_analysis():
-    # Load parameters directly from your update
     config = load_portfolio_config()
     cash_balance = float(config.get("cash_balance_gbp", 0))
     dates = config.get("comparison_dates", {})
@@ -76,7 +96,10 @@ def run_historical_analysis():
     leaderboard = []
     total_pl_portfolio = 0.0
     
-    print(f"⏳ Extracting historical window boundaries from config: {date_a} ➡️ {date_b}...")
+    # Initialize persistent HTTP session to manage cookies and tokens automatically
+    session = requests.Session()
+    
+    print(f"⏳ Querying authenticated historical data window: {date_a} ➡️ {date_b}...")
     print(f"📋 Total items to process: {len(config['holdings'])} holdings.\n")
     
     for idx, item in enumerate(config["holdings"], start=1):
@@ -85,30 +108,30 @@ def run_historical_analysis():
         shares = float(item["shares_owned"])
         is_pence = item.get("is_pence", False)
         
-        # Fallback mechanism: Attempt lookup via ISIN first, then via base Morningstar Ticker symbol
-        raw_price_a = scrape_historical_price(isin, date_a)
+        # Pull historical values using the validated session workflow
+        raw_price_a = scrape_historical_price_with_session(session, isin, date_a)
         if not raw_price_a and "ticker" in item:
-            ticker_base = item["ticker"].split('.')[0]
-            raw_price_a = scrape_historical_price(ticker_base, date_a)
+            raw_price_a = scrape_historical_price_with_session(session, item["ticker"].split('.')[0], date_a)
             
-        raw_price_b = scrape_historical_price(isin, date_b)
+        raw_price_b = scrape_historical_price_with_session(session, isin, date_b)
         if not raw_price_b and "ticker" in item:
-            ticker_base = item["ticker"].split('.')[0]
-            raw_price_b = scrape_historical_price(ticker_base, date_b)
+            raw_price_b = scrape_historical_price_with_session(session, item["ticker"].split('.')[0], date_b)
             
         if raw_price_a is None or raw_price_b is None:
-            print(f"   ⚠️ [{idx}/{len(config['holdings'])}] Skipping {name}: Historical records unavailable for targeted range.")
+            print(f"   ⚠️ [{idx}/{len(config['holdings'])}] Skipping {name}: Historical data row not found.")
             continue
             
-        # Standardize units to Great British Pounds (£)
+        # Standardize units
         price_a = raw_price_a / 100.0 if is_pence else raw_price_a
         price_b = raw_price_b / 100.0 if is_pence else raw_price_b
         
-        # Calculate localized position values
+        # Position calculations
         val_a = shares * price_a
         val_b = shares * price_b
         abs_pl = val_b - val_a
-        pct_change = ((price_b - price_a) / price_a) * 100
+        
+        # Prevent division by zero if asset had a technical pricing anomaly
+        pct_change = ((price_b - price_a) / price_a) * 100 if price_a > 0 else 0.0
         
         total_pl_portfolio += abs_pl
         
@@ -124,17 +147,15 @@ def run_historical_analysis():
         })
         print(f"   📊 [{idx}/{len(config['holdings'])}] {name}: {round(pct_change, 2)}% growth")
         
-        # Polite trailing window delay to protect target endpoint resources
-        time.sleep(0.4)
+        # Moderate pause between items to prevent anti-bot rate-limiting
+        time.sleep(0.6)
 
     if not leaderboard:
-        print("❌ Error: No fund metrics could be extracted from the target dates. Check if data fell on a weekend.")
+        print("❌ Error: No fund metrics could be extracted. Verify that your target dates do not fall on bank holidays or weekends.")
         return
 
-    # Sort mathematically by momentum performance (Highest Growth First)
     leaderboard.sort(key=lambda x: x["growth_percentage"], reverse=True)
     
-    # Define execution instructions for the LLM runtime
     system_instruction = (
         "You are a portfolio performance and cash deployment optimization agent. "
         "You are given pre-sorted historical calculations and financial data. You must preserve all numbers exactly "
@@ -155,7 +176,6 @@ def run_historical_analysis():
     )
     
     print("\n🚀 Passing verified tracking data into Gemini inference engine...")
-    
     response = client.models.generate_content(
         model=MODEL_ID,
         contents=user_prompt,
