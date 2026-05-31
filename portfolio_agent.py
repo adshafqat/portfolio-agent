@@ -1,6 +1,7 @@
 import os
 import ssl
 import json
+from datetime import datetime
 import yfinance as yf
 from dotenv import load_dotenv
 from google import genai
@@ -30,11 +31,8 @@ def load_portfolio_data(filename="portfolio.json") -> dict:
         with open(filename, 'r') as file:
             return json.load(file)
     except FileNotFoundError:
-        print(f"⚠️ {filename} not found. Falling back to default baseline profile.")
-        return {
-            "cash_balance_usd": 0.0,
-            "holdings": []
-        }
+        print(f"⚠️ {filename} not found. Falling back to baseline baseline profiles.")
+        return {"cash_balance_usd": 0.0, "holdings": []}
     except json.JSONDecodeError:
         raise ValueError(f"❌ Error: {filename} contains invalid JSON formatting.")
 
@@ -76,9 +74,9 @@ def run_financial_agent():
     portfolio_snapshot = load_portfolio_data("portfolio.json")
     
     if not portfolio_snapshot["holdings"]:
-        print("❌ Portfolio is empty or couldn't be read. Exiting.")
+        print("❌ Portfolio data empty or unreadable. Exiting loop step.")
         return
-    
+
     system_instruction = (
         "You are an expert personal financial optimization agent. Your objective is to look at a "
         "user's asset balance data, execute market tools to find real-time pricing performance, and compile "
@@ -99,7 +97,7 @@ def run_financial_agent():
         f"   - Option C: Value/Room-to-Grow Allocation (tilt heavily toward the stock with the most room below its 3-month peak).\n"
         f"Output everything in a structured markdown report."
     )
-
+    
     print("🚀 [Agent Initialization]: Spinning up reasoning engine loop...")
     
     try:
@@ -113,10 +111,22 @@ def run_financial_agent():
         )
         
         response = chat.send_message(user_prompt)
+        report_content = response.text
         
+        # Display the output to the terminal screen
         print("\n=== AGENT OUTPUT REPORT ===\n")
-        print(response.text)
+        print(report_content)
         print("\n============================\n")
+        
+        # 7. EXPORTER ENGINE: Write output file automatically
+        os.makedirs("reports", exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        report_filename = f"reports/balancing_report_{timestamp}.md"
+        
+        with open(report_filename, "w") as out_file:
+            out_file.write(report_content)
+            
+        print(f"💾 [System Success]: Report archived securely to filesystem at: {report_filename}")
         
     except Exception as e:
         print(f"\n❌ [Critical Engine Failure]: Framework loop crashed: {str(e)}")
