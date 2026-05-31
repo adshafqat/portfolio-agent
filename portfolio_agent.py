@@ -24,7 +24,7 @@ def load_portfolio_data(filename="portfolio.json") -> dict:
         return json.load(file)
 
 def scrape_price_from_ft(identifier: str) -> float:
-    """Scrapes raw valuation text numbers directly as displayed on FT summary banners."""
+    """Scrapes raw data from FT and checks the page currency context to auto-normalize GBX to GBP."""
     for extension in [":GBX", ":GBP"]:
         url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={identifier}{extension}"
         headers = {
@@ -37,6 +37,7 @@ def scrape_price_from_ft(identifier: str) -> float:
                 
             soup = BeautifulSoup(response.text, 'html.parser')
             
+            # 1. Identify the price value
             price_element = soup.find("span", class_="mod-ui-data-list__value")
             if not price_element:
                 price_element = soup.find("span", class_="mod-ui-data-label__value")
@@ -50,7 +51,15 @@ def scrape_price_from_ft(identifier: str) -> float:
                 cleaned_numeric = "".join(c for c in raw_text if c.isdigit() or c == '.')
                 parsed_price = float(cleaned_numeric)
                 
-                # Trust the parsed raw value natively from FT platform
+                # 2. Smart Currency Detection: Look at the data banner for currency keys
+                page_source_upper = response.text.upper()
+                
+                # If the URL container or header labels specify Pence/GBX, normalize it automatically
+                if "PENCE" in page_source_upper or "GBX" in page_source_upper or extension == ":GBX":
+                    # Safety check: If FT returned a normalized quote like '1.10' but page context says GBX
+                    if parsed_price > 10.0: 
+                        return round(parsed_price / 100.0, 4)
+                        
                 return round(parsed_price, 4)
                 
         except Exception:
@@ -111,7 +120,7 @@ def run_financial_agent():
         "user's asset balance data, review current pricing performance metrics, and compile "
         "a highly objective investment balancing report. You must calculate the current value of each "
         "holding by multiplying Shares Owned by Current Price exactly, and sum them precisely along with "
-        "the cash balance to find the true Total Portfolio Value. Do not round off values to arbitrary targets."
+        "the cash balance to find the true Total Portfolio Value. Do not round off values or alter the input numbers."
     )
     
     user_prompt = (
