@@ -20,7 +20,7 @@ api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 MODEL_ID = "gemini-2.5-flash"
 
-# No exchange-traded identifiers. All target elements route cleanly through FT.com
+# No raw exchange-traded tickers. All elements route through the FT Fund Scraper
 EXCHANGE_TRADED_TICKERS = []
 
 def load_portfolio_data(filename="portfolio.json") -> dict:
@@ -28,8 +28,12 @@ def load_portfolio_data(filename="portfolio.json") -> dict:
         return json.load(file)
 
 def scrape_price_from_ft(isin: str) -> float:
-    """Scrapes live fund prices from FT.com using a multi-selector structural fallback framework."""
-    url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={isin}"
+    """Scrapes live fund prices from FT.com using a multi-selector structural fallback framework.
+    
+    Appends the country/currency extension (:GBP) to ensure clean index resolution.
+    """
+    # ENHANCEMENT: Forcing the :GBP extension guarantees FT tracks the explicit retail share class directly
+    url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={isin}:GBP"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
@@ -37,14 +41,14 @@ def scrape_price_from_ft(isin: str) -> float:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200:
             return None
-
+            
         soup = BeautifulSoup(response.text, 'html.parser')
         price_element = None
-
+        
         # Selector Option 1: Standard data block metrics frame
         price_element = soup.find("span", class_="mod-ui-data-list__value")
         
-        # Selector Option 2: Main promotional upper marquee container banner
+        # Selector Option 2: Main upper marquee container banner
         if not price_element:
             price_element = soup.find("span", class_="mod-ui-data-label__value")
             
@@ -109,7 +113,7 @@ def run_financial_agent():
     for item in portfolio_snapshot["holdings"]:
         metrics = get_asset_metrics(item)
         resolved_metrics.append(metrics)
-        # 0.75-second delay preserves host server parameters during mass queries
+        # Polite execution pacing prevents connection blocks during macro batch loops
         time.sleep(0.75)
 
     system_instruction = (
