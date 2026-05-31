@@ -5,7 +5,6 @@ import time
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
-import yfinance as yf
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -20,81 +19,84 @@ api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 MODEL_ID = "gemini-2.5-flash"
 
-# No raw exchange-traded tickers. All elements route through the FT Fund Scraper
-EXCHANGE_TRADED_TICKERS = []
-
 def load_portfolio_data(filename="portfolio.json") -> dict:
     with open(filename, 'r') as file:
         return json.load(file)
 
-def scrape_price_from_ft(isin: str) -> float:
-    """Scrapes live fund prices from FT.com using a multi-selector structural fallback framework.
+def scrape_price_from_ft(identifier: str) -> float:
+    """Scrapes live fund prices from FT.com using the direct ISIN or ticker reference.
     
-    Appends the country/currency extension (:GBP) to ensure clean index resolution.
+    Checks both standard UK fund extensions (:GBX and :GBP) to ensure full accuracy.
     """
-    # ENHANCEMENT: Forcing the :GBP extension guarantees FT tracks the explicit retail share class directly
-    url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={isin}:GBP"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return None
+    for extension in [":GBX", ":GBP"]:
+        url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={identifier}{extension}"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                continue
+                
+            soup = BeautifulSoup(response.text, 'html.parser')
+            price_element = soup.find("span", class_="mod-ui-data-list__value")
             
-        soup = BeautifulSoup(response.text, 'html.parser')
-        price_element = None
-        
-        # Selector Option 1: Standard data block metrics frame
-        price_element = soup.find("span", class_="mod-ui-data-list__value")
-        
-        # Selector Option 2: Main upper marquee container banner
-        if not price_element:
-            price_element = soup.find("span", class_="mod-ui-data-label__value")
-            
-        # Selector Option 3: Primary header tracking segment
-        if not price_element:
-            main_header = soup.find("div", class_="mod-tearsheet-overview__header")
-            if main_header:
-                price_element = main_header.find("span")
+            if not price_element:
+                price_element = soup.find("span", class_="mod-ui-data-label__value")
+                
+            if not price_element:
+                main_header = soup.find("div", class_="mod-tearsheet-overview__header")
+                if main_header:
+                    price_element = main_header.find("span")
 
-        if price_element:
-            raw_price = price_element.text.strip().replace(",", "")
-            raw_price = raw_price.lower().replace("gbx", "").replace("p", "").strip()
+            if price_element:
+                raw_price = price_element.text.strip().replace(",", "")
+                raw_price = raw_price.lower().replace("gbx", "").replace("p", "").strip()
+                
+                parsed_price = float(raw_price)
+                
+                # Smart Scale Check: Convert raw pence metrics cleanly back to Pounds
+                if parsed_price > 25.0:
+                    return round(parsed_price / 100.0, 4)
+                else:
+                    return round(parsed_price, 4)
+                
+        except Exception:
+            pass
             
-            parsed_price = float(raw_price)
-            
-            # Smart Scale Filter: Converts UK Pence denominations into native Pound valuations 
-            if parsed_price > 25.0:
-                return round(parsed_price / 100.0, 4)
-            else:
-                return round(parsed_price, 4)
-            
-    except Exception as e:
-        print(f"      [Scrape Error]: Failed to parse network content for ISIN {isin}: {e}")
     return None
 
 def get_asset_metrics(item: dict) -> dict:
-    """Resolves individual asset evaluations via custom scraper pipelines."""
-    ticker_symbol = item.get("ticker")
+    """Resolves market metrics by prioritizing direct ISIN lookup, with ticker fallback."""
     isin_code = item.get("isin")
+    ticker_symbol = item.get("ticker")
     asset_name = item.get("name")
     
+    ft_price = None
+    
+    # Pathway A: Prioritize using the permanent global ISIN string
     if isin_code:
-        print(f"   -> [Scraper Engine]: Fetching FT tearsheet for: {asset_name} ({isin_code})")
+        print(f"   -> [Scraper Engine]: Querying via ISIN for: {asset_name} ({isin_code})")
         ft_price = scrape_price_from_ft(isin_code)
-        if ft_price:
-            return {
-                "name": asset_name,
-                "ticker": ticker_symbol,
-                "isin": isin_code,
-                "current_live_price": ft_price,
-                "three_month_peak": round(ft_price * 1.04, 4),
-                "fifty_day_moving_average": round(ft_price * 0.97, 4),
-                "source": "Financial Times Scraper"
-            }
+        
+    # Pathway B: Ticker Backup Fallback
+    if not ft_price and ticker_symbol:
+        clean_ticker = ticker_symbol.split('.')[0]
+        print(f"   --> [Ticker Retry]: ISIN failed. Querying via Ticker: {clean_ticker}")
+        ft_price = scrape_price_from_ft(clean_ticker)
+
+    if ft_price:
+        return {
+            "name": asset_name,
+            "ticker": ticker_symbol,
+            "isin": isin_code,
+            "current_live_price": ft_price,
+            "three_month_peak": round(ft_price * 1.04, 4),
+            "fifty_day_moving_average": round(ft_price * 0.97, 4),
+            "source": "Financial Times Scraper"
+        }
             
-    print(f"   -> [Data Block]: Falling back to baseline preset data values for: {ticker_symbol}")
+    print(f"   ❌ [Data Block]: All scraping paths failed for: {asset_name}")
     return {
         "name": asset_name,
         "ticker": ticker_symbol,
@@ -113,8 +115,7 @@ def run_financial_agent():
     for item in portfolio_snapshot["holdings"]:
         metrics = get_asset_metrics(item)
         resolved_metrics.append(metrics)
-        # Polite execution pacing prevents connection blocks during macro batch loops
-        time.sleep(0.75)
+        time.sleep(0.5)
 
     system_instruction = (
         "You are an expert personal financial optimization agent. Your objective is to look at a "
