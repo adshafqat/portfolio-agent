@@ -20,7 +20,7 @@ api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 MODEL_ID = "gemini-2.5-flash"
 
-# True exchange-traded assets can stay on yfinance for lightning-fast execution
+# True exchange-traded assets stay on yfinance for reliable market metrics
 EXCHANGE_TRADED_TICKERS = ["VGOV.L"]
 
 def load_portfolio_data(filename="portfolio.json") -> dict:
