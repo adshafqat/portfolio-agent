@@ -7,94 +7,79 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-# 1. Force fix SSL context blockages common on headless Linux cloud instances
 try:
     ssl._create_default_https_context = ssl._create_unverified_context
 except AttributeError:
     pass
 
-# 2. Load Environment Credentials from local .env file
 load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
-
-if not api_key:
-    raise ValueError("Error: GEMINI_API_KEY not found in .env file.")
-
-# 3. Initialize the official Google GenAI Client
 client = genai.Client(api_key=api_key)
 MODEL_ID = "gemini-2.5-flash"
 
-# 4. Dynamic Portfolio Loader Function
 def load_portfolio_data(filename="portfolio.json") -> dict:
-    """Reads and parses the asset allocation data from a local JSON file."""
-    try:
-        with open(filename, 'r') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        print(f"⚠️ {filename} not found. Falling back to baseline baseline profiles.")
-        return {"cash_balance_usd": 0.0, "holdings": []}
-    except json.JSONDecodeError:
-        raise ValueError(f"❌ Error: {filename} contains invalid JSON formatting.")
+    with open(filename, 'r') as file:
+        return json.load(file)
 
-# 5. Define the Analytical Tool for the Agent
-def get_stock_metrics(ticker_symbol: str) -> dict:
-    """
-    Fetches real-time market data, the 50-day moving average, and 3-month high 
-    metrics for a specified stock ticker symbol from Yahoo Finance.
-    """
-    print(f"   -> [Tool Executing]: Extracting live market data for ticker: {ticker_symbol}")
+def get_stock_metrics(ticker_symbol: str, fallback_item: dict = None) -> dict:
+    """Fetches real-time yfinance data. Safely falls back to platform metrics on failure."""
+    print(f"   -> [Data Request]: Fetching metrics for: {ticker_symbol}")
     try:
         ticker = yf.Ticker(ticker_symbol)
         history_3mo = ticker.history(period="3mo")
         
         if history_3mo.empty or len(history_3mo) < 2:
-            return {"error": f"No market data could be retrieved for ticker {ticker_symbol}"}
+            raise ValueError("No historical tracking values available.")
             
         current_price = float(history_3mo['Close'].iloc[-1])
         three_month_peak = float(history_3mo['High'].max())
-        
-        closing_prices = history_3mo['Close']
-        if len(closing_prices) >= 50:
-            fifty_day_moving_avg = float(closing_prices.tail(50).mean())
-        else:
-            fifty_day_moving_avg = float(closing_prices.mean())
+        fifty_day_moving_avg = float(history_3mo['Close'].tail(50).mean())
         
         return {
             "ticker": ticker_symbol,
             "current_live_price": round(current_price, 2),
             "three_month_peak": round(three_month_peak, 2),
-            "fifty_day_moving_average": round(fifty_day_moving_avg, 2)
+            "fifty_day_moving_average": round(fifty_day_moving_avg, 2),
+            "source": "Live Market API"
         }
-    except Exception as e:
-        return {"error": f"Failed to gather financial data for {ticker_symbol}: {str(e)}"}
+    except Exception:
+        if fallback_item:
+            return {
+                "ticker": ticker_symbol,
+                "current_live_price": fallback_item.get("current_price"),
+                "three_month_peak": fallback_item.get("three_month_peak"),
+                "fifty_day_moving_average": fallback_item.get("fifty_day_moving_average"),
+                "source": "Platform Baseline Fallback"
+            }
+        return {"error": f"Data context unavailable for {ticker_symbol}"}
 
-# 6. Core Orchestration Engine
 def run_financial_agent():
-    # Load dynamic snapshot right when the script is run
     portfolio_snapshot = load_portfolio_data("portfolio.json")
     
-    if not portfolio_snapshot["holdings"]:
-        print("❌ Portfolio data empty or unreadable. Exiting loop step.")
-        return
+    # Pre-fetch and assemble metrics locally to protect the loop structure
+    resolved_metrics = []
+    for item in portfolio_snapshot["holdings"]:
+        metrics = get_stock_metrics(item["ticker"], fallback_item=item)
+        resolved_metrics.append(metrics)
 
     system_instruction = (
         "You are an expert personal financial optimization agent. Your objective is to look at a "
-        "user's asset balance data, execute market tools to find real-time pricing performance, and compile "
+        "user's asset balance data, review current pricing performance metrics, and compile "
         "a highly objective investment balancing report. You must perform exact mathematical calculations "
         "showing concrete allocation scenarios. Do not give direct legal or definitive tax advice."
     )
     
     user_prompt = (
-        f"Review my current holdings and cash position from my portfolio data: {portfolio_snapshot}. "
-        f"1. Use get_stock_metrics to get live market metrics for each ticker listed.\n"
-        f"2. Present the current data cleanly in a markdown table.\n"
-        f"3. Provide 3 shighly specific, actionable options for deploying the cash balance of exactly "
-        f"£{portfolio_snapshot['cash_balance_gbp']:,} into my current holdings based on their performance.\n"
-        f"   - Each option must calculate the EXACT number of whole shares/units to purchase based on the live price pulled, "
+        f"Review my current holdings and cash position: {portfolio_snapshot}.\n"
+        f"Here are the processed performance metrics for each asset: {resolved_metrics}.\n"
+        f"1. Present the current data cleanly in a markdown table showing total portfolio valuation calculations.\n"
+        f"2. Provide 3 highly specific, actionable options for deploying the cash balance of exactly "
+        f"£{portfolio_snapshot['cash_balance_gbp']:,} into my current holdings based on their performance metrics.\n"
+        f"   - Each option must calculate the EXACT number of whole shares/units to purchase based on the current price, "
         f"the total cost of those units, and the remaining cash balance left over.\n"
-        f"   - Option A: Balanced Allocation (split cash relatively evenly among active holdings).\n"
-        f"   - Option B: Momentum Allocation (tilt heavily toward the assets furthest above their 50-day average).\n"
-        f"   - Option C: Value/Room-to-Grow Allocation (tilt heavily toward the assets with the most room below their 3-month peak).\n"
+        f"   - Option A: Balanced Allocation (split cash relatively evenly among holdings you deem appropriate).\n"
+        f"   - Option B: Momentum Allocation (tilt heavily toward assets furthest above their 50-day average).\n"
+        f"   - Option C: Value/Room-to-Grow Allocation (tilt heavily toward assets with the most room below their 3-month peak).\n"
         f"Output everything in a structured markdown report."
     )
     
@@ -105,7 +90,6 @@ def run_financial_agent():
             model=MODEL_ID,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
-                tools=[get_stock_metrics],
                 temperature=0.2
             )
         )
@@ -113,20 +97,16 @@ def run_financial_agent():
         response = chat.send_message(user_prompt)
         report_content = response.text
         
-        # Display the output to the terminal screen
         print("\n=== AGENT OUTPUT REPORT ===\n")
         print(report_content)
         print("\n============================\n")
         
-        # 7. EXPORTER ENGINE: Write output file automatically
         os.makedirs("reports", exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        report_filename = f"reports/balancing_report_{timestamp}.md"
-        
-        with open(report_filename, "w") as out_file:
+        with open(f"reports/balancing_report_{timestamp}.md", "w") as out_file:
             out_file.write(report_content)
             
-        print(f"💾 [System Success]: Report archived securely to filesystem at: {report_filename}")
+        print(f"💾 [System Success]: Report archived safely to reports/balancing_report_{timestamp}.md")
         
     except Exception as e:
         print(f"\n❌ [Critical Engine Failure]: Framework loop crashed: {str(e)}")
