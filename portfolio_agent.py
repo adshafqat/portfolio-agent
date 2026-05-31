@@ -19,33 +19,33 @@ api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 MODEL_ID = "gemini-2.5-flash"
 
-# BULLETPROOF MARKET DATA CONFIGURATION MAP
-# True = The FT page returns this asset in PENCE (Needs to be divided by 100)
-# False = The FT page returns this asset in POUNDS (Leave exactly as is)
+# THE SOURCE OF TRUTH CONVERT MATRIX
+# True  = Fund quotes on FT in Pence (Must divide by 100 to get GBP)
+# False = Fund quotes on FT directly in Pounds (Keep exactly as is)
 UK_FUND_CURRENCY_MAP = {
-    "GB00B3VDD431": False, # Artemis Strategic Assets I Acc (£1.10)
-    "GB00BBGBFM09": True,  # Fidelity MnyBldCrpBd W Acc GBP (1418.00p -> £14.18)
-    "GB00B849C803": True,  # iShares Osea GovBdIdx(UK) D A (118.93p -> £1.1893)
-    "GB00BXVMC989": True,  # Janus Henderson FxdIntMthIn I A (139.60p -> £1.3960)
-    "GB00B84QXT94": True,  # L&G All StocksGblGvBdIdx Tst I Acc (104.60p -> £1.0460)
-    "GB00B4M89245": False, # Vanguard UKLngDurGiltIdx A AE (£124.07 or £1.24 depending on tracking)
-    "GB00B6R51K64": True,  # Aviva Inv UK Listed Eq Inc 2 Acc (348.59p -> £3.4859)
-    "GB00B57H4F11": True,  # Liontrust Spl Sits I Inc (457.76p -> £4.5776)
-    "GB00BV9G3J51": True,  # Ninety One UK Focsh I Acc (181.00p -> £1.8100)
-    "GB00B8Y4ZB91": True,  # Royal London UK Equity Inc M Acc (351.70p -> £3.5170)
-    "GB00B2PLJP95": False, # Artemis SmrtSARPGlbEq I Acc (£7.68)
-    "GB0005941272": True,  # Baillie Gifford International B Acc (12670.00p -> £126.70)
-    "GB00B6YTYJ18": True,  # BlackRock Cntl European D Inc (3753.44p -> £37.5344)
-    "GB00B7S9KM94": False, # BNY Mellon Gbl Inc Inst W Acc GBP (£4.39)
-    "GB00B8BQG486": False, # BNY Mellon Gbl Inc Inst W Inc GBP (£2.81)
-    "GB00B41YBW71": False, # Fundsmith Equity I Acc (£7.05)
-    "GB00B80QG615": False, # HSBC American Index C Acc (£16.30)
-    "GB00B2Q5DR06": False, # JPM US Select C Acc (£12.59)
-    "GB00B5TGB445": True,  # Jupiter Japan Income I Acc (240.81p -> £2.4081)
-    "GB00B6Y7NF43": True,  # Fidelity ASI W A (3061.00p -> £30.61)
-    "GB00BK35F408": True,  # L&G ProptyFeedr I AE (106.10p -> £1.0610)
-    "GB00B8GG4B61": False, # BNY Mellon RealRtn I W Acc (£1.79)
-    "GB00BG0J2688": True,  # Liontrust Spl Sits I Acc (123.43p -> £1.2343)
+    "GB00B3VDD431": False, # Artemis Strategic Assets
+    "GB00BBGBFM09": True,  # Fidelity MoneyBuilder Corp Bond
+    "GB00B849C803": True,  # iShares Overseas Govt Bond Index
+    "GB00BXVMC989": True,  # Janus Henderson Fixed Interest
+    "GB00B84QXT94": True,  # L&G All Stocks Global Govt Bond
+    "GB00B4M89245": False, # Vanguard UK Long Duration Gilt (Natively £124.07)
+    "GB00B6R51K64": True,  # Aviva Inv UK Listed Equity
+    "GB00B57H4F11": True,  # Liontrust Special Situations Inc
+    "GB00BV9G3J51": True,  # Ninety One UK Focus
+    "GB00B8Y4ZB91": True,  # Royal London UK Equity Income
+    "GB00B2PLJP95": False, # Artemis SmartGARP Global Equity
+    "GB0005941272": True,  # Baillie Gifford International
+    "GB00B6YTYJ18": True,  # BlackRock Continental European
+    "GB00B7S9KM94": False, # BNY Mellon Global Income Acc
+    "GB00B8BQG486": False, # BNY Mellon Global Income Inc
+    "GB00B41YBW71": False, # Fundsmith Equity
+    "GB00B80QG615": False, # HSBC American Index
+    "GB00B2Q5DR06": False, # JPM US Select
+    "GB00B5TGB445": True,  # Jupiter Japan Income
+    "GB00B6Y7NF43": True,  # Fidelity Asian Special Situations
+    "GB00BK35F408": True,  # L&G Property Feeder
+    "GB00B8GG4B61": False, # BNY Mellon Real Return
+    "GB00BG0J2688": True,  # Liontrust Special Situations Acc
 }
 
 def load_portfolio_data(filename="portfolio.json") -> dict:
@@ -53,7 +53,7 @@ def load_portfolio_data(filename="portfolio.json") -> dict:
         return json.load(file)
 
 def scrape_price_from_ft(identifier: str, isin: str) -> float:
-    """Scrapes raw valuation data and processes scaling based on explicit configuration."""
+    """Scrapes raw valuation text numbers, relying cleanly on the configuration map."""
     for extension in [":GBX", ":GBP"]:
         url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={identifier}{extension}"
         headers = {
@@ -65,6 +65,7 @@ def scrape_price_from_ft(identifier: str, isin: str) -> float:
                 continue
                 
             soup = BeautifulSoup(response.text, 'html.parser')
+            
             price_element = soup.find("span", class_="mod-ui-data-list__value")
             if not price_element:
                 price_element = soup.find("span", class_="mod-ui-data-label__value")
@@ -74,18 +75,15 @@ def scrape_price_from_ft(identifier: str, isin: str) -> float:
                     price_element = main_header.find("span")
 
             if price_element:
-                raw_price = price_element.text.strip().replace(",", "")
-                raw_price = raw_price.lower().replace("gbx", "").replace("p", "").strip()
-                parsed_price = float(raw_price)
+                raw_text = price_element.text.strip().replace(",", "")
+                # Pull just the numeric digits and decimal point points safely
+                cleaned_numeric = "".join(c for c in raw_text if c.isdigit() or c == '.')
+                parsed_price = float(cleaned_numeric)
                 
-                # Apply explicit currency scaling logic based on our static lookup matrix
-                needs_pence_scaling = UK_FUND_CURRENCY_MAP.get(isin, False)
+                # Check our static conversion lookup matrix
+                divide_by_hundred = UK_FUND_CURRENCY_MAP.get(isin, False)
                 
-                # Special safety catch for Vanguard tracking variations
-                if isin == "GB00B4M89245" and parsed_price > 50.0:
-                    return round(parsed_price / 100.0, 4)
-
-                if needs_pence_scaling:
+                if divide_by_hundred:
                     return round(parsed_price / 100.0, 4)
                 else:
                     return round(parsed_price, 4)
@@ -146,8 +144,9 @@ def run_financial_agent():
     system_instruction = (
         "You are an expert personal financial optimization agent. Your objective is to look at a "
         "user's asset balance data, review current pricing performance metrics, and compile "
-        "a highly objective investment balancing report. You must perform exact mathematical calculations "
-        "showing concrete allocation scenarios. Do not give direct legal or definitive tax advice."
+        "a highly objective investment balancing report. You must calculate the current value of each "
+        "holding by multiplying Shares Owned by Current Price exactly, and sum them precisely along with "
+        "the cash balance to find the true Total Portfolio Value. Do not round off values to arbitrary targets."
     )
     
     user_prompt = (
@@ -158,9 +157,6 @@ def run_financial_agent():
         f"£{portfolio_snapshot['cash_balance_gbp']:,} into my current holdings based on their performance metrics.\n"
         f"   - Each option must calculate the EXACT number of whole shares/units to purchase based on the current price, "
         f"the total cost of those units, and the remaining cash balance left over.\n"
-        f"   - Option A: Balanced Allocation (Pick 3 to 5 primary holdings you deem appropriate to split the cash evenly across).\n"
-        f"   - Option B: Momentum Allocation (Tilt heavily towards the assets currently performing furthest above their 50-day average).\n"
-        f"   - Option C: Value/Room-to-Grow Allocation (Tilt heavily towards the assets currently trading furthest below their 3-month peak).\n"
         f"Output everything in a beautifully structured markdown report."
     )
     
