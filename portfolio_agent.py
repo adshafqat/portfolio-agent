@@ -19,24 +19,6 @@ api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 MODEL_ID = "gemini-2.5-flash"
 
-# Hardcoded reference matrix matching your exact portfolio requirements
-PENCE_FUNDS = {
-    "GB00BBGBFM09", # Fidelity MnyBldCrpBd W Acc GBP
-    "GB00B849C803", # iShares Osea GovBdIdx(UK) D A
-    "GB00BXVMC989", # Janus Henderson FxdIntMthIn I A
-    "GB00B84QXT94", # L&G All StocksGblGvBdIdx Tst I Acc
-    "GB00B6R51K64", # Aviva Inv UK Listed Eq Inc 2 Acc
-    "GB00B57H4F11", # Liontrust Spl Sits I Inc
-    "GB00BV9G3J51", # Ninety One UK Focsh I Acc
-    "GB00B8Y4ZB91", # Royal London UK Equity Inc M Acc
-    "GB0005941272", # Baillie Gifford International B Acc
-    "GB00B6YTYJ18", # BlackRock Cntl European D Inc
-    "GB00B5TGB445", # Jupiter Japan Income I Acc
-    "GB00B6Y7NF43", # Fidelity ASI W A
-    "GB00BK35F408", # L&G ProptyFeedr I AE
-    "GB00BG0J2688"  # Liontrust Spl Sits I Acc
-}
-
 def load_portfolio_data(filename="portfolio.json") -> dict:
     with open(filename, 'r') as file:
         return json.load(file)
@@ -78,6 +60,7 @@ def get_asset_metrics(item: dict) -> dict:
     ticker_symbol = item.get("ticker")
     asset_name = item.get("name")
     shares_owned = float(item.get("shares_owned", 0))
+    is_pence = item.get("is_pence", False) # Dynamic lookup from JSON configuration
     
     ft_price = None
     if isin_code:
@@ -93,8 +76,8 @@ def get_asset_metrics(item: dict) -> dict:
         print(f"   ❌ [Data Block]: All scraping paths failed for: {asset_name}")
         ft_price = 1.00
 
-    # Programmatic Currency Normalization (Guarantees Python calculates clean base numbers)
-    price_in_gbp = ft_price / 100.0 if isin_code in PENCE_FUNDS else ft_price
+    # Programmatic Currency Normalization using the JSON-defined flag
+    price_in_gbp = ft_price / 100.0 if is_pence else ft_price
     calculated_value = round(shares_owned * price_in_gbp, 2)
 
     return {
@@ -120,7 +103,7 @@ def run_financial_agent():
         resolved_metrics.append(metrics)
         time.sleep(0.5)
 
-    # Programmatic Summarization (Completely eliminates LLM math hallucination)
+    # Programmatic Summarization (Preserving your exact mathematical totals)
     total_holdings_value = round(sum(asset["calculated_value_gbp"] for asset in resolved_metrics), 2)
     grand_total_portfolio = round(total_holdings_value + cash_balance, 2)
 
