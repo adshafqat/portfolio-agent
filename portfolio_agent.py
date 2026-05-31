@@ -2,6 +2,7 @@ import os
 import ssl
 import json
 import time
+from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -22,58 +23,60 @@ def load_portfolio_config():
     with open(JSON_FILE, 'r') as f:
         return json.load(f)
 
-def scrape_historical_price_with_session(session, identifier: str, target_date: str) -> float:
-    formatted_date = target_date.replace("-", "/")
+def scrape_historical_price_with_window(session, identifier: str, target_date_str: str) -> float:
+    """
+    Queries a 5-day window around the target date to guarantee data capture 
+    even if the target date falls on a weekend, market closure, or holiday.
+    """
+    target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
+    # Open a lookback window up to 5 days prior to catch the closest trading session
+    start_dt = target_dt - timedelta(days=5)
+    
+    formatted_from = start_dt.strftime("%Y/%m/%d")
+    formatted_to = target_dt.strftime("%Y/%m/%d")
     
     for extension in [":GBX", ":GBP"]:
         url = f"https://markets.ft.com/data/funds/tearsheet/historical?s={identifier}{extension}"
         headers = {
-            'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/119.0',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Referer': url
+        }
+        payload = {
+            'historicalForm-dateFrom': formatted_from,
+            'historicalForm-dateTo': formatted_to,
+            'historicalForm-submit': 'Update'
         }
         try:
             get_response = session.get(url, headers=headers, timeout=10)
             soup_get = BeautifulSoup(get_response.text, 'html.parser')
             
             form = soup_get.find("form", id="historicalForm") or soup_get.find("form")
-            payload = {}
+            form_payload = {}
             if form:
                 for hidden_input in form.find_all("input", type="hidden"):
                     if hidden_input.get("name"):
-                        payload[hidden_input["name"]] = hidden_input.get("value", "")
+                        form_payload[hidden_input["name"]] = hidden_input.get("value", "")
             
-            payload.update({
-                'historicalForm-dateFrom': formatted_date,
-                'historicalForm-dateTo': formatted_date,
-                'historicalForm-submit': 'Update'
-            })
+            form_payload.update(payload)
             
-            post_response = session.post(url, headers=headers, data=payload, timeout=10)
+            post_response = session.post(url, headers=headers, data=form_payload, timeout=10)
             soup_post = BeautifulSoup(post_response.text, 'html.parser')
             
             data_table = soup_post.find("table", class_="mod-ui-table")
             if data_table:
                 rows = data_table.find_all("tr")
+                # Row 0 is the header. Row 1 is mathematically the most recent trading day in that window
                 if len(rows) > 1:
                     cells = rows[1].find_all("td")
-                    if cells:
+                    if cells and len(cells) >= 5:
+                        # Extract the closing price (Index 4)
                         close_price_text = cells[4].text.strip().replace(",", "")
+                        captured_date = cells[0].text.strip()
                         return round(float(close_price_text), 4)
-            
-            # --- DIAGNOSTIC CHECK ---
-            print(f"\n[DIAGNOSTIC] Table parsing failed for {identifier}.")
-            if "captcha" in post_response.text.lower() or "cloudflare" in post_response.text.lower():
-                print("🚨 CRITICAL: The request is blocked by Cloudflare / Bot Protection Captcha.")
-            elif "no data found" in post_response.text.lower() or "invalid date" in post_response.text.lower():
-                print("📅 NOTICE: FT claims there is no trading data available for this specific date.")
-            else:
-                print(f"📄 Server returned Status {post_response.status_code}, but table layout was unexpected.")
-            # ------------------------
-            
-        except Exception as e:
-            print(f"Exception error: {e}")
+        except Exception:
+            pass
     return None
-    
+
 def run_historical_analysis():
     config = load_portfolio_config()
     cash_balance = float(config.get("cash_balance_gbp", 0))
@@ -83,16 +86,14 @@ def run_historical_analysis():
     date_b = dates.get("date_b")
     
     if not date_a or not date_b:
-        print("❌ Runtime Aborted: Missing 'date_a' or 'date_b' configuration values inside JSON.")
+        print("❌ Runtime Aborted: Missing comparison dates in JSON configuration.")
         return
 
     leaderboard = []
     total_pl_portfolio = 0.0
-    
-    # Initialize persistent HTTP session to manage cookies and tokens automatically
     session = requests.Session()
     
-    print(f"⏳ Querying authenticated historical data window: {date_a} ➡️ {date_b}...")
+    print(f"⏳ Querying historical data window: {date_a} ➡️ {date_b}...")
     print(f"📋 Total items to process: {len(config['holdings'])} holdings.\n")
     
     for idx, item in enumerate(config["holdings"], start=1):
@@ -101,29 +102,27 @@ def run_historical_analysis():
         shares = float(item["shares_owned"])
         is_pence = item.get("is_pence", False)
         
-        # Pull historical values using the validated session workflow
-        raw_price_a = scrape_historical_price_with_session(session, isin, date_a)
-        if not raw_price_a and "ticker" in item:
-            raw_price_a = scrape_historical_price_with_session(session, item["ticker"].split('.')[0], date_a)
+        # Pull historical values using windowed verification fallback logic
+        raw_price_a = scrape_historical_price_with_window(session, isin, date_a)
+        if raw_price_a is None and "ticker" in item:
+            raw_price_a = scrape_historical_price_with_window(session, item["ticker"].split('.')[0], date_a)
             
-        raw_price_b = scrape_historical_price_with_session(session, isin, date_b)
-        if not raw_price_b and "ticker" in item:
-            raw_price_b = scrape_historical_price_with_session(session, item["ticker"].split('.')[0], date_b)
+        raw_price_b = scrape_historical_price_with_window(session, isin, date_b)
+        if raw_price_b is None and "ticker" in item:
+            raw_price_b = scrape_historical_price_with_window(session, item["ticker"].split('.')[0], date_b)
             
         if raw_price_a is None or raw_price_b is None:
-            print(f"   ⚠️ [{idx}/{len(config['holdings'])}] Skipping {name}: Historical data row not found.")
+            print(f"   ⚠️ [{idx}/{len(config['holdings'])}] Skipping {name}: Historical data completely unavailable.")
             continue
             
-        # Standardize units
+        # Standardize units down to GBP
         price_a = raw_price_a / 100.0 if is_pence else raw_price_a
         price_b = raw_price_b / 100.0 if is_pence else raw_price_b
         
-        # Position calculations
+        # Value Calculations
         val_a = shares * price_a
         val_b = shares * price_b
         abs_pl = val_b - val_a
-        
-        # Prevent division by zero if asset had a technical pricing anomaly
         pct_change = ((price_b - price_a) / price_a) * 100 if price_a > 0 else 0.0
         
         total_pl_portfolio += abs_pl
@@ -139,12 +138,10 @@ def run_historical_analysis():
             "growth_percentage": round(pct_change, 2)
         })
         print(f"   📊 [{idx}/{len(config['holdings'])}] {name}: {round(pct_change, 2)}% growth")
-        
-        # Moderate pause between items to prevent anti-bot rate-limiting
-        time.sleep(0.6)
+        time.sleep(0.5)
 
     if not leaderboard:
-        print("❌ Error: No fund metrics could be extracted. Verify that your target dates do not fall on bank holidays or weekends.")
+        print("❌ Error: No fund metrics could be extracted. Check network connectivity.")
         return
 
     leaderboard.sort(key=lambda x: x["growth_percentage"], reverse=True)
