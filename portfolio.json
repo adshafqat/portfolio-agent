@@ -1,28 +1,8 @@
 {
   "cash_balance_gbp": 6049.62,
   "holdings": [
-    {"ticker": "0P00014H4E.L", "name": "Artemis Strategic Assets I Acc", "shares_owned": 23259.2360, "current_price": 1.0950, "fifty_day_moving_average": 1.0710, "three_month_peak": 1.1120},
-    {"ticker": "0P0000W3AG.L", "name": "Fidelity MoneyBuilder Income W Acc GBP", "shares_owned": 115.4800, "current_price": 14.1800, "fifty_day_moving_average": 13.9200, "three_month_peak": 14.3500},
-    {"ticker": "0P0000X67B.L", "name": "iShares Overseas CorpBdIdx(UK) D Acc", "shares_owned": 832.5840, "current_price": 1.1893, "fifty_day_moving_average": 1.2140, "three_month_peak": 1.2210},
-    {"ticker": "0P00013X12.L", "name": "Janus Henderson FxInterMthly I A Inc", "shares_owned": 943.2500, "current_price": 1.3960, "fifty_day_moving_average": 1.3620, "three_month_peak": 1.4150},
-    {"ticker": "0P0000XYS1.L", "name": "L&G All StocksGiltIdx Tst I Acc", "shares_owned": 625.1570, "current_price": 1.0460, "fifty_day_moving_average": 1.0520, "three_month_peak": 1.0680},
-    {"ticker": "VGOV.L", "name": "Vanguard UKLngDurGiltIdx A AE", "shares_owned": 6.8443, "current_price": 124.0715, "fifty_day_moving_average": 121.3500, "three_month_peak": 126.8000},
-    {"ticker": "0P0000WCH7.L", "name": "Aviva Inv UK Listed Eq Inc 2 Acc", "shares_owned": 185.5840, "current_price": 3.4859, "fifty_day_moving_average": 3.3210, "three_month_peak": 3.4910},
-    {"ticker": "0P0000W70G.L", "name": "Liontrust Spl Sits I Inc", "shares_owned": 502.5760, "current_price": 4.5776, "fifty_day_moving_average": 4.6120, "three_month_peak": 4.6850},
-    {"ticker": "0P0000X8G0.L", "name": "Ninety One UK Franch I Acc", "shares_owned": 317.9390, "current_price": 1.8100, "fifty_day_moving_average": 1.7640, "three_month_peak": 1.8450},
-    {"ticker": "0P0000W8BW.L", "name": "Royal London UK Equity Inc M Acc", "shares_owned": 919.6573, "current_price": 3.5170, "fifty_day_moving_average": 3.3850, "three_month_peak": 3.5520},
-    {"ticker": "0P0000ZWCO.L", "name": "Artemis SmrtGARPUKEq I Acc", "shares_owned": 111.2900, "current_price": 7.6779, "fifty_day_moving_average": 7.1520, "three_month_peak": 7.7210},
-    {"ticker": "0P0000W89P.L", "name": "Baillie Gifford International B Acc", "shares_owned": 4.9650, "current_price": 126.7000, "fifty_day_moving_average": 122.4500, "three_month_peak": 128.9000},
-    {"ticker": "0P0000XBJD.L", "name": "BlackRock Cntl European D Inc", "shares_owned": 192.6540, "current_price": 37.5344, "fifty_day_moving_average": 36.1200, "three_month_peak": 37.8500},
-    {"ticker": "0P0000WG64.L", "name": "BNY Mellon Gbl Inc Inst W Acc GBP", "shares_owned": 1468.0200, "current_price": 4.3922, "fifty_day_moving_average": 4.1950, "three_month_peak": 4.4120},
-    {"ticker": "0P0000WG6E.L", "name": "BNY Mellon Gbl Inc Inst W Inc GBP", "shares_owned": 40.7190, "current_price": 2.8051, "fifty_day_moving_average": 2.7120, "three_month_peak": 2.8450},
-    {"ticker": "FUNDSWI.L", "name": "Fundsmith Equity I Acc", "shares_owned": 385.5400, "current_price": 7.0510, "fifty_day_moving_average": 6.8950, "three_month_peak": 7.1210},
-    {"ticker": "HAMSICA.L", "name": "HSBC American Index C Acc", "shares_owned": 595.4200, "current_price": 16.3090, "fifty_day_moving_average": 15.4200, "three_month_peak": 16.3500},
-    {"ticker": "0P0000W850.L", "name": "JPM US Select C Acc", "shares_owned": 427.2930, "current_price": 12.5930, "fifty_day_moving_average": 11.9800, "three_month_peak": 12.6500},
-    {"ticker": "0P0000X8GZ.L", "name": "Jupiter Japan Income I Acc", "shares_owned": 495.8900, "current_price": 2.4081, "fifty_day_moving_average": 2.3150, "three_month_peak": 2.4420},
-    {"ticker": "0P00015LDT.L", "name": "Fidelity ASI W A", "shares_owned": 208.5200, "current_price": 30.6100, "fifty_day_moving_average": 29.4500, "three_month_peak": 30.9500},
-    {"ticker": "0P0000X8AK.L", "name": "L&G ProptyFeeder I AE", "shares_owned": 2906.9000, "current_price": 1.0610, "fifty_day_moving_average": 1.0420, "three_month_peak": 1.0850},
-    {"ticker": "0P0000WG8S.L", "name": "BNY Mellon RealRtn I W Acc", "shares_owned": 779.5830, "current_price": 1.7948, "fifty_day_moving_average": 1.7620, "three_month_peak": 1.8210},
-    {"ticker": "0P0000W70G_ACC.L", "name": "Liontrust Spl Sits I Acc", "shares_owned": 378.1580, "current_price": 1.2343, "fifty_day_moving_average": 1.2110, "three_month_peak": 1.2550}
+    {"isin": "GB00B4M9Y724", "ticker": "0P00014H4E.L", "name": "Artemis Strategic Assets I Acc", "shares_owned": 23259.2360},
+    {"isin": "GB00B2Q6HW61", "ticker": "0P0000W278.L", "name": "Fundsmith Equity I Acc", "shares_owned": 385.5400},
+    {"ticker": "VGOV.L", "name": "Vanguard UKLngDurGiltIdx A AE", "shares_owned": 6.8443}
   ]
 }
