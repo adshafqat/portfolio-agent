@@ -23,8 +23,8 @@ def load_portfolio_data(filename="portfolio.json") -> dict:
     with open(filename, 'r') as file:
         return json.load(file)
 
-def scrape_price_from_ft(identifier: str, is_pence: bool) -> float:
-    """Scrapes raw valuation text numbers, relying cleanly on the JSON config flag."""
+def scrape_price_from_ft(identifier: str) -> float:
+    """Scrapes raw valuation text numbers directly as displayed on FT summary banners."""
     for extension in [":GBX", ":GBP"]:
         url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={identifier}{extension}"
         headers = {
@@ -50,11 +50,8 @@ def scrape_price_from_ft(identifier: str, is_pence: bool) -> float:
                 cleaned_numeric = "".join(c for c in raw_text if c.isdigit() or c == '.')
                 parsed_price = float(cleaned_numeric)
                 
-                # Use the clean parameter handed down from our JSON file load loop
-                if is_pence:
-                    return round(parsed_price / 100.0, 4)
-                else:
-                    return round(parsed_price, 4)
+                # Trust the parsed raw value natively from FT platform
+                return round(parsed_price, 4)
                 
         except Exception:
             pass
@@ -65,18 +62,17 @@ def get_asset_metrics(item: dict) -> dict:
     isin_code = item.get("isin")
     ticker_symbol = item.get("ticker")
     asset_name = item.get("name")
-    is_pence = item.get("is_pence", False)  # Defaults to False if missing
     
     ft_price = None
     
     if isin_code:
         print(f"   -> [Scraper Engine]: Querying via ISIN for: {asset_name} ({isin_code})")
-        ft_price = scrape_price_from_ft(isin_code, is_pence)
+        ft_price = scrape_price_from_ft(isin_code)
         
     if not ft_price and ticker_symbol:
         clean_ticker = ticker_symbol.split('.')[0]
         print(f"   --> [Ticker Retry]: ISIN failed. Querying via Ticker: {clean_ticker}")
-        ft_price = scrape_price_from_ft(clean_ticker, is_pence)
+        ft_price = scrape_price_from_ft(clean_ticker)
 
     if ft_price:
         return {
