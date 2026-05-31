@@ -23,52 +23,34 @@ def load_portfolio_config():
         return json.load(f)
 
 def scrape_historical_price_with_session(session, identifier: str, target_date: str) -> float:
-    """
-    First executes a GET request to harvest dynamic form tracking state, 
-    then POSTs the date filter parameters to extract the true historical price.
-    """
     formatted_date = target_date.replace("-", "/")
     
     for extension in [":GBX", ":GBP"]:
         url = f"https://markets.ft.com/data/funds/tearsheet/historical?s={identifier}{extension}"
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/119.0',
             'Referer': url
         }
         try:
-            # Step 1: Establish context and pull down the hidden CSRF/Form state tokens
             get_response = session.get(url, headers=headers, timeout=10)
-            if get_response.status_code != 200:
-                continue
-                
             soup_get = BeautifulSoup(get_response.text, 'html.parser')
             
-            # Locate the historical form tracking tokens
-            form = soup_get.find("form", id="historicalForm")
-            if not form:
-                # Fallback to general input search if form ID names slightly deviate
-                form = soup_get.find("form")
-                
-            # Build payload starting with all default hidden fields found on the page
+            form = soup_get.find("form", id="historicalForm") or soup_get.find("form")
             payload = {}
             if form:
                 for hidden_input in form.find_all("input", type="hidden"):
                     if hidden_input.get("name"):
                         payload[hidden_input["name"]] = hidden_input.get("value", "")
             
-            # Step 2: Inject your target dates into the payload fields
             payload.update({
                 'historicalForm-dateFrom': formatted_date,
                 'historicalForm-dateTo': formatted_date,
                 'historicalForm-submit': 'Update'
             })
             
-            # Step 3: Post the validated payload back to the server
             post_response = session.post(url, headers=headers, data=payload, timeout=10)
-            if post_response.status_code != 200:
-                continue
-                
             soup_post = BeautifulSoup(post_response.text, 'html.parser')
+            
             data_table = soup_post.find("table", class_="mod-ui-table")
             if data_table:
                 rows = data_table.find_all("tr")
@@ -77,10 +59,21 @@ def scrape_historical_price_with_session(session, identifier: str, target_date: 
                     if cells:
                         close_price_text = cells[4].text.strip().replace(",", "")
                         return round(float(close_price_text), 4)
-        except Exception:
-            pass
+            
+            # --- DIAGNOSTIC CHECK ---
+            print(f"\n[DIAGNOSTIC] Table parsing failed for {identifier}.")
+            if "captcha" in post_response.text.lower() or "cloudflare" in post_response.text.lower():
+                print("🚨 CRITICAL: The request is blocked by Cloudflare / Bot Protection Captcha.")
+            elif "no data found" in post_response.text.lower() or "invalid date" in post_response.text.lower():
+                print("📅 NOTICE: FT claims there is no trading data available for this specific date.")
+            else:
+                print(f"📄 Server returned Status {post_response.status_code}, but table layout was unexpected.")
+            # ------------------------
+            
+        except Exception as e:
+            print(f"Exception error: {e}")
     return None
-
+    
 def run_historical_analysis():
     config = load_portfolio_config()
     cash_balance = float(config.get("cash_balance_gbp", 0))
