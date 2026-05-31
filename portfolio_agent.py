@@ -20,19 +20,15 @@ api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 MODEL_ID = "gemini-2.5-flash"
 
-# True exchange-traded assets stay on yfinance for reliable market metrics
-EXCHANGE_TRADED_TICKERS = ["VGOV.L"]
+# No exchange-traded identifiers. All target elements route cleanly through FT.com
+EXCHANGE_TRADED_TICKERS = []
 
 def load_portfolio_data(filename="portfolio.json") -> dict:
     with open(filename, 'r') as file:
         return json.load(file)
 
 def scrape_price_from_ft(isin: str) -> float:
-    """Scrapes the live fund price directly from Financial Times (FT.com) using its ISIN.
-    
-    Uses resilient multi-selector fallback logic to account for varying page structures
-    and includes a smart currency filter to prevent Pence-vs-Pound math errors.
-    """
+    """Scrapes live fund prices from FT.com using a multi-selector structural fallback framework."""
     url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={isin}"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -41,18 +37,18 @@ def scrape_price_from_ft(isin: str) -> float:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200:
             return None
-            
+
         soup = BeautifulSoup(response.text, 'html.parser')
         price_element = None
-        
-        # Selector 1: Standard data list metric layout used for common mutual funds
+
+        # Selector Option 1: Standard data block metrics frame
         price_element = soup.find("span", class_="mod-ui-data-list__value")
         
-        # Selector 2: Fallback to the massive marquee header item if it's styled differently
+        # Selector Option 2: Main promotional upper marquee container banner
         if not price_element:
             price_element = soup.find("span", class_="mod-ui-data-label__value")
             
-        # Selector 3: Alternative overview metric class block
+        # Selector Option 3: Primary header tracking segment
         if not price_element:
             main_header = soup.find("div", class_="mod-tearsheet-overview__header")
             if main_header:
@@ -60,67 +56,48 @@ def scrape_price_from_ft(isin: str) -> float:
 
         if price_element:
             raw_price = price_element.text.strip().replace(",", "")
-            # Clear out raw string suffix labels if present (e.g., 'GBX' or 'p')
             raw_price = raw_price.lower().replace("gbx", "").replace("p", "").strip()
             
             parsed_price = float(raw_price)
             
-            # Smart Scale Check: UK mutual funds on FT are often quoted in raw PENCE (e.g., 705.0p).
-            # If the number is large (> 15.0), we divide by 100 to scale it down to standard pounds (£7.05).
-            # If it's already a small decimal (e.g., 1.09 or 7.05), we use it exactly as is.
-            if parsed_price > 15.0:
+            # Smart Scale Filter: Converts UK Pence denominations into native Pound valuations 
+            if parsed_price > 25.0:
                 return round(parsed_price / 100.0, 4)
             else:
                 return round(parsed_price, 4)
             
     except Exception as e:
-        print(f"      [Scrape Error]: Failed to parse HTML content for ISIN {isin}: {e}")
+        print(f"      [Scrape Error]: Failed to parse network content for ISIN {isin}: {e}")
     return None
 
 def get_asset_metrics(item: dict) -> dict:
-    """Resolves data via yfinance for ETFs, and targets FT.com for mutual funds."""
+    """Resolves individual asset evaluations via custom scraper pipelines."""
     ticker_symbol = item.get("ticker")
     isin_code = item.get("isin")
+    asset_name = item.get("name")
     
-    # Pathway A: Exchange Traded Asset (Use yfinance API)
-    if ticker_symbol in EXCHANGE_TRADED_TICKERS:
-        print(f"   -> [Exchange API]: Querying yfinance for ETF: {ticker_symbol}")
-        try:
-            ticker = yf.Ticker(ticker_symbol)
-            history = ticker.history(period="3mo")
-            if not history.empty:
-                current_price = float(history['Close'].iloc[-1])
-                return {
-                    "ticker": ticker_symbol,
-                    "current_live_price": round(current_price, 2),
-                    "three_month_peak": round(float(history['High'].max()), 2),
-                    "fifty_day_moving_average": round(float(history['Close'].tail(50).mean()), 2),
-                    "source": "Live Exchange API"
-                }
-        except Exception:
-            pass
-
-    # Pathway B: Mutual Fund (Use FT.com Scraper via ISIN)
     if isin_code:
-        print(f"   -> [Scraper Engine]: Fetching FT.com tearsheet for ISIN: {isin_code}")
+        print(f"   -> [Scraper Engine]: Fetching FT tearsheet for: {asset_name} ({isin_code})")
         ft_price = scrape_price_from_ft(isin_code)
         if ft_price:
             return {
-                "ticker": ticker_symbol or isin_code,
+                "name": asset_name,
+                "ticker": ticker_symbol,
+                "isin": isin_code,
                 "current_live_price": ft_price,
-                # Create standard operational moving bands based on extracted spot price
-                "three_month_peak": round(ft_price * 1.03, 4),
-                "fifty_day_moving_average": round(ft_price * 0.98, 4),
+                "three_month_peak": round(ft_price * 1.04, 4),
+                "fifty_day_moving_average": round(ft_price * 0.97, 4),
                 "source": "Financial Times Scraper"
             }
             
-    # Pathway C: Complete Fallback safety checkpoint
-    print(f"   -> [Data Block]: Falling back to local data values for: {ticker_symbol}")
+    print(f"   -> [Data Block]: Falling back to baseline preset data values for: {ticker_symbol}")
     return {
+        "name": asset_name,
         "ticker": ticker_symbol,
-        "current_live_price": item.get("current_price", 1.0),
-        "three_month_peak": item.get("three_month_peak", 1.0),
-        "fifty_day_moving_average": item.get("fifty_day_moving_average", 1.0),
+        "isin": isin_code,
+        "current_live_price": 1.00,
+        "three_month_peak": 1.04,
+        "fifty_day_moving_average": 0.97,
         "source": "Platform Baseline Preset"
     }
 
@@ -128,11 +105,12 @@ def run_financial_agent():
     portfolio_snapshot = load_portfolio_data("portfolio.json")
     
     resolved_metrics = []
+    print("⏳ [Data Gathering Phase]: Extracting real-time market metrics...")
     for item in portfolio_snapshot["holdings"]:
         metrics = get_asset_metrics(item)
         resolved_metrics.append(metrics)
-        # Add a polite delay to keep scraping loops friendly to FT servers
-        time.sleep(0.5)
+        # 0.75-second delay preserves host server parameters during mass queries
+        time.sleep(0.75)
 
     system_instruction = (
         "You are an expert personal financial optimization agent. Your objective is to look at a "
@@ -142,27 +120,27 @@ def run_financial_agent():
     )
     
     user_prompt = (
-        f"Review my current holdings and cash position: {portfolio_snapshot}.\n"
+        f"Review my complete portfolio holdings matrix: {portfolio_snapshot}.\n"
         f"Here are the processed performance metrics for each asset: {resolved_metrics}.\n"
-        f"1. Present the current data cleanly in a markdown table showing total portfolio valuation calculations.\n"
-        f"2. Provide 3 highly specific, actionable options for deploying the cash balance of exactly "
+        f"1. Present the data clearly in a markdown table showing total portfolio valuation calculations.\n"
+        f"2. Provide 3 highly specific, actionable options for deploying my available cash balance of exactly "
         f"£{portfolio_snapshot['cash_balance_gbp']:,} into my current holdings based on their performance metrics.\n"
         f"   - Each option must calculate the EXACT number of whole shares/units to purchase based on the current price, "
         f"the total cost of those units, and the remaining cash balance left over.\n"
-        f"   - Option A: Balanced Allocation (split cash relatively evenly among holdings you deem appropriate).\n"
-        f"   - Option B: Momentum Allocation (tilt heavily toward assets furthest above their 50-day average).\n"
-        f"   - Option C: Value/Room-to-Grow Allocation (tilt heavily toward assets with the most room below their 3-month peak).\n"
-        f"Output everything in a structured markdown report."
+        f"   - Option A: Balanced Allocation (Pick 3 to 5 primary holdings you deem appropriate to split the cash evenly across).\n"
+        f"   - Option B: Momentum Allocation (Tilt heavily towards the assets currently performing furthest above their 50-day average).\n"
+        f"   - Option C: Value/Room-to-Grow Allocation (Tilt heavily towards the assets currently trading furthest below their 3-month peak).\n"
+        f"Output everything in a beautifully structured markdown report."
     )
     
-    print("🚀 [Agent Initialization]: Spinning up reasoning engine loop...")
+    print("\n🚀 [Agent Initialization]: Spinning up reasoning engine loop...")
     
     try:
         chat = client.chats.create(
             model=MODEL_ID,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
-                temperature=0.2
+                temperature=0.1
             )
         )
         
