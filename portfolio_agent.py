@@ -78,20 +78,28 @@ def run_financial_agent():
     if not portfolio_snapshot["holdings"]:
         print("❌ Portfolio is empty or couldn't be read. Exiting.")
         return
-
+    
     system_instruction = (
         "You are an expert personal financial optimization agent. Your objective is to look at a "
-        "user's asset balance data, execute market tools to find historical performance, and compile "
-        "a highly objective markdown investment balancing report. Do not give direct legal or definitive tax advice; "
-        "provide structured options based on live data metrics."
+        "user's asset balance data, execute market tools to find real-time pricing performance, and compile "
+        "a highly objective investment balancing report. You must perform exact mathematical calculations "
+        "showing concrete allocation scenarios. Do not give direct legal or definitive tax advice."
     )
     
     user_prompt = (
-        f"Review my current holdings and cash position: {portfolio_snapshot}. "
-        f"Use the get_stock_metrics tool to look up live market data for each of my holdings. "
-        f"Evaluate which ones are performing favorably compared to their averages, and write a "
-        f"structured markdown report recommending alternative ways I could deploy my cash balance."
+        f"Review my current holdings and cash position from my portfolio data: {portfolio_snapshot}. "
+        f"1. Use get_stock_metrics to get live market metrics for AAPL, TSLA, and MSFT.\n"
+        f"2. Present the current data cleanly in a markdown table.\n"
+        f"3. Provide 3 highly specific, actionable options for deploying the cash balance of exactly "
+        f"${portfolio_snapshot['cash_balance_usd']:,} into my current holdings based on their performance.\n"
+        f"   - Each option must calculate the EXACT number of whole shares to purchase based on the live price pulled, "
+        f"the total cost of those shares, and the remaining cash balance left over.\n"
+        f"   - Option A: Balanced Allocation (split cash relatively evenly among all three holdings).\n"
+        f"   - Option B: Momentum Allocation (tilt heavily toward the stock furthest above its 50-day average).\n"
+        f"   - Option C: Value/Room-to-Grow Allocation (tilt heavily toward the stock with the most room below its 3-month peak).\n"
+        f"Output everything in a structured markdown report."
     )
+
     
     print("🚀 [Agent Initialization]: Spinning up reasoning engine loop...")
     
