@@ -2,165 +2,170 @@ import os
 import ssl
 import json
 import time
-from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+# Workaround for local environments with strict certificate validation issues
 try:
     ssl._create_default_https_context = ssl._create_unverified_context
 except AttributeError:
     pass
 
+# Initialize Environment and Google GenAI Engine
 load_dotenv()
-api_key = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 MODEL_ID = "gemini-2.5-flash"
+JSON_FILE = "portfolio.json"
 
-def load_portfolio_data(filename="portfolio.json") -> dict:
-    with open(filename, 'r') as file:
-        return json.load(file)
+def load_portfolio_config():
+    """Reads the configuration and complete asset registry from the JSON file."""
+    with open(JSON_FILE, 'r') as f:
+        return json.load(f)
 
-def scrape_price_from_ft(identifier: str) -> float:
-    """Scrapes raw valuation data directly from the available FT endpoint summaries."""
+def scrape_historical_price(identifier: str, target_date: str) -> float:
+    """
+    Submits a targeted POST request to the Financial Times database engine 
+    to retrieve the exact closing price for an individual date.
+    """
+    formatted_date = target_date.replace("-", "/")
+    
+    # Financial Times tracks historical funds using either :GBX or :GBP modifiers
     for extension in [":GBX", ":GBP"]:
-        url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={identifier}{extension}"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        url = f"https://markets.ft.com/data/funds/tearsheet/historical?s={identifier}{extension}"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        payload = {
+            'historicalForm-dateFrom': formatted_date,
+            'historicalForm-dateTo': formatted_date,
+            'historicalForm-submit': 'Update'
         }
         try:
-            response = requests.get(url, headers=headers, timeout=10)
+            response = requests.post(url, headers=headers, data=payload, timeout=10)
             if response.status_code != 200:
                 continue
                 
             soup = BeautifulSoup(response.text, 'html.parser')
-            
-            price_element = soup.find("span", class_="mod-ui-data-list__value")
-            if not price_element:
-                price_element = soup.find("span", class_="mod-ui-data-label__value")
-            if not price_element:
-                main_header = soup.find("div", class_="mod-tearsheet-overview__header")
-                if main_header:
-                    price_element = main_header.find("span")
-
-            if price_element:
-                raw_text = price_element.text.strip().replace(",", "")
-                cleaned_numeric = "".join(c for c in raw_text if c.isdigit() or c == '.')
-                return round(float(cleaned_numeric), 4)
-                
+            data_table = soup.find("table", class_="mod-ui-table")
+            if data_table:
+                rows = data_table.find_all("tr")
+                if len(rows) > 1:
+                    cells = rows[1].find_all("td")
+                    if cells:
+                        # Extract and clean closing price (column index 4)
+                        close_price_text = cells[4].text.strip().replace(",", "")
+                        return round(float(close_price_text), 4)
         except Exception:
             pass
-            
     return None
 
-def get_asset_metrics(item: dict) -> dict:
-    isin_code = item.get("isin")
-    ticker_symbol = item.get("ticker")
-    asset_name = item.get("name")
-    shares_owned = float(item.get("shares_owned", 0))
-    is_pence = item.get("is_pence", False) # Dynamic lookup from JSON configuration
+def run_historical_analysis():
+    # Load parameters directly from your update
+    config = load_portfolio_config()
+    cash_balance = float(config.get("cash_balance_gbp", 0))
+    dates = config.get("comparison_dates", {})
     
-    ft_price = None
-    if isin_code:
-        print(f"   -> [Scraper Engine]: Querying via ISIN for: {asset_name} ({isin_code})")
-        ft_price = scrape_price_from_ft(isin_code)
+    date_a = dates.get("date_a")
+    date_b = dates.get("date_b")
+    
+    if not date_a or not date_b:
+        print("❌ Runtime Aborted: Missing 'date_a' or 'date_b' configuration values inside JSON.")
+        return
+
+    leaderboard = []
+    total_pl_portfolio = 0.0
+    
+    print(f"⏳ Extracting historical window boundaries from config: {date_a} ➡️ {date_b}...")
+    print(f"📋 Total items to process: {len(config['holdings'])} holdings.\n")
+    
+    for idx, item in enumerate(config["holdings"], start=1):
+        isin = item["isin"]
+        name = item["name"]
+        shares = float(item["shares_owned"])
+        is_pence = item.get("is_pence", False)
         
-    if not ft_price and ticker_symbol:
-        clean_ticker = ticker_symbol.split('.')[0]
-        print(f"   --> [Ticker Retry]: ISIN failed. Querying via Ticker: {clean_ticker}")
-        ft_price = scrape_price_from_ft(clean_ticker)
+        # Fallback mechanism: Attempt lookup via ISIN first, then via base Morningstar Ticker symbol
+        raw_price_a = scrape_historical_price(isin, date_a)
+        if not raw_price_a and "ticker" in item:
+            ticker_base = item["ticker"].split('.')[0]
+            raw_price_a = scrape_historical_price(ticker_base, date_a)
+            
+        raw_price_b = scrape_historical_price(isin, date_b)
+        if not raw_price_b and "ticker" in item:
+            ticker_base = item["ticker"].split('.')[0]
+            raw_price_b = scrape_historical_price(ticker_base, date_b)
+            
+        if raw_price_a is None or raw_price_b is None:
+            print(f"   ⚠️ [{idx}/{len(config['holdings'])}] Skipping {name}: Historical records unavailable for targeted range.")
+            continue
+            
+        # Standardize units to Great British Pounds (£)
+        price_a = raw_price_a / 100.0 if is_pence else raw_price_a
+        price_b = raw_price_b / 100.0 if is_pence else raw_price_b
+        
+        # Calculate localized position values
+        val_a = shares * price_a
+        val_b = shares * price_b
+        abs_pl = val_b - val_a
+        pct_change = ((price_b - price_a) / price_a) * 100
+        
+        total_pl_portfolio += abs_pl
+        
+        leaderboard.append({
+            "name": name,
+            "isin": isin,
+            "price_date_a": round(price_a, 4),
+            "price_date_b": round(price_b, 4),
+            "value_date_a": round(val_a, 2),
+            "value_date_b": round(val_b, 2),
+            "profit_loss_gbp": round(abs_pl, 2),
+            "growth_percentage": round(pct_change, 2)
+        })
+        print(f"   📊 [{idx}/{len(config['holdings'])}] {name}: {round(pct_change, 2)}% growth")
+        
+        # Polite trailing window delay to protect target endpoint resources
+        time.sleep(0.4)
 
-    if not ft_price:
-        print(f"   ❌ [Data Block]: All scraping paths failed for: {asset_name}")
-        ft_price = 1.00
+    if not leaderboard:
+        print("❌ Error: No fund metrics could be extracted from the target dates. Check if data fell on a weekend.")
+        return
 
-    # Programmatic Currency Normalization using the JSON-defined flag
-    price_in_gbp = ft_price / 100.0 if is_pence else ft_price
-    calculated_value = round(shares_owned * price_in_gbp, 2)
-
-    return {
-        "name": asset_name,
-        "ticker": ticker_symbol,
-        "isin": isin_code,
-        "shares_owned": shares_owned,
-        "scraped_raw_price": ft_price,
-        "normalized_price_gbp": round(price_in_gbp, 4),
-        "calculated_value_gbp": calculated_value,
-        "three_month_peak_gbp": round(price_in_gbp * 1.03, 4),
-        "fifty_day_moving_average_gbp": round(price_in_gbp * 0.98, 4)
-    }
-
-def run_financial_agent():
-    portfolio_snapshot = load_portfolio_data("portfolio.json")
-    cash_balance = float(portfolio_snapshot.get("cash_balance_gbp", 0))
+    # Sort mathematically by momentum performance (Highest Growth First)
+    leaderboard.sort(key=lambda x: x["growth_percentage"], reverse=True)
     
-    resolved_metrics = []
-    print("⏳ [Data Gathering Phase]: Extracting real-time market metrics...")
-    for item in portfolio_snapshot["holdings"]:
-        metrics = get_asset_metrics(item)
-        resolved_metrics.append(metrics)
-        time.sleep(0.5)
-
-    # Programmatic Summarization (Preserving your exact mathematical totals)
-    total_holdings_value = round(sum(asset["calculated_value_gbp"] for asset in resolved_metrics), 2)
-    grand_total_portfolio = round(total_holdings_value + cash_balance, 2)
-
+    # Define execution instructions for the LLM runtime
     system_instruction = (
-        "You are an expert personal financial optimization agent. Your objective is to take pre-calculated, "
-        "verified financial data assets and organize them into a clean balancing report.\n\n"
-        "CRITICAL COMPLIANCE DIRECTION:\n"
-        "1. You are provided with values computed directly by the system runtime. You MUST print these figures exactly. "
-        "Do not recalculate rows, alter decimal placements, or introduce your own arithmetic sums.\n"
-        "2. The 'calculated_value_gbp' field provided for each asset represents its true total value in Pounds (£). "
-        "Display this number unaltered in your output table."
+        "You are a portfolio performance and cash deployment optimization agent. "
+        "You are given pre-sorted historical calculations and financial data. You must preserve all numbers exactly "
+        "as provided by the runtime. Do not recalculate totals or apply alternative rounding formulas."
     )
     
     user_prompt = (
-        f"Generate a finalized investment report based on the following verified calculations:\n\n"
-        f"--- REALIZED METRICS COLLECTION ---\n"
-        f"{json.dumps(resolved_metrics, indent=2)}\n\n"
-        f"--- SUMMARY METRICS ---\n"
-        f"Cash Balance: £{cash_balance:,.2f}\n"
-        f"Verified Total Holdings Value: £{total_holdings_value:,.2f}\n"
-        f"Verified Grand Total Portfolio Value: £{grand_total_portfolio:,.2f}\n\n"
-        f"REQUIRED REPORT STRUCTURE:\n"
-        f"1. A beautiful markdown table presenting the data exactly as calculated by the runtime: "
-        f"(Name, ISIN, Shares Owned, Current Price (GBP), and Current Value (GBP)). Append rows showing the "
-        f"Verified Total Holdings Value and Grand Total Portfolio Value at the bottom using the exact summary variables provided.\n"
-        f"2. Provide 3 highly specific options for deploying the cash balance of £{cash_balance:,.2f} into current holdings.\n"
-        f"   - For each option, pick target funds and calculate the exact number of whole shares/units to buy using their "
-        f"normalized_price_gbp, show total cost, and calculate the exact remaining cash down to the penny."
+        f"Generate a Performance Momentum & Cash Deployment Report based on the window from {date_a} to {date_b}.\n\n"
+        f"--- METRICS MATRIX ---\n"
+        f"{json.dumps(leaderboard, indent=2)}\n\n"
+        f"--- CONTEXT LOGS ---\n"
+        f"Total Portfolio Profit/Loss over this window: £{total_pl_portfolio:,.2f}\n"
+        f"Cash Available for Investment: £{cash_balance:,.2f}\n\n"
+        f"REQUIRED MARKDOWN OUTPUT:\n"
+        f"1. A clean comparison table: (Fund Name, Value on {date_a}, Value on {date_b}, Net Profit/Loss (£), Growth Rate (%))\n"
+        f"2. Executive Insight: Highlight the total profit/loss statement across this specific period, and call out the top 3 highest performing funds.\n"
+        f"3. Momentum Deployment Strategy: Allocate the cash balance of £{cash_balance:,.2f} strictly into those top 3 funds. Calculate whole shares to buy based on the price_date_b value, showing the cash leftover down to the penny."
     )
     
-    print("\n🚀 [Agent Initialization]: Spinning up reasoning engine loop...")
+    print("\n🚀 Passing verified tracking data into Gemini inference engine...")
     
-    try:
-        chat = client.chats.create(
-            model=MODEL_ID,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.1
-            )
-        )
-        
-        response = chat.send_message(user_prompt)
-        report_content = response.text
-        
-        print("\n=== AGENT OUTPUT REPORT ===\n")
-        print(report_content)
-        print("\n============================\n")
-        
-        os.makedirs("reports", exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        with open(f"reports/balancing_report_{timestamp}.md", "w") as out_file:
-            out_file.write(report_content)
-            
-        print(f"💾 [System Success]: Report archived safely to reports/balancing_report_{timestamp}.md")
-        
-    except Exception as e:
-        print(f"\n❌ [Critical Engine Failure]: Framework loop crashed: {str(e)}")
+    response = client.models.generate_content(
+        model=MODEL_ID,
+        contents=user_prompt,
+        config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.1)
+    )
+    
+    print("\n" + "="*60)
+    print("      HISTORICAL PERFORMANCE & ALLOCATION ENGINE REPORT")
+    print("="*60 + "\n")
+    print(response.text)
 
 if __name__ == "__main__":
-    run_financial_agent()
+    run_historical_analysis()
