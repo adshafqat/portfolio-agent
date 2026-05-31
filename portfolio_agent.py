@@ -19,16 +19,41 @@ api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 MODEL_ID = "gemini-2.5-flash"
 
+# BULLETPROOF MARKET DATA CONFIGURATION MAP
+# True = The FT page returns this asset in PENCE (Needs to be divided by 100)
+# False = The FT page returns this asset in POUNDS (Leave exactly as is)
+UK_FUND_CURRENCY_MAP = {
+    "GB00B3VDD431": False, # Artemis Strategic Assets I Acc (£1.10)
+    "GB00BBGBFM09": True,  # Fidelity MnyBldCrpBd W Acc GBP (1418.00p -> £14.18)
+    "GB00B849C803": True,  # iShares Osea GovBdIdx(UK) D A (118.93p -> £1.1893)
+    "GB00BXVMC989": True,  # Janus Henderson FxdIntMthIn I A (139.60p -> £1.3960)
+    "GB00B84QXT94": True,  # L&G All StocksGblGvBdIdx Tst I Acc (104.60p -> £1.0460)
+    "GB00B4M89245": False, # Vanguard UKLngDurGiltIdx A AE (£124.07 or £1.24 depending on tracking)
+    "GB00B6R51K64": True,  # Aviva Inv UK Listed Eq Inc 2 Acc (348.59p -> £3.4859)
+    "GB00B57H4F11": True,  # Liontrust Spl Sits I Inc (457.76p -> £4.5776)
+    "GB00BV9G3J51": True,  # Ninety One UK Focsh I Acc (181.00p -> £1.8100)
+    "GB00B8Y4ZB91": True,  # Royal London UK Equity Inc M Acc (351.70p -> £3.5170)
+    "GB00B2PLJP95": False, # Artemis SmrtSARPGlbEq I Acc (£7.68)
+    "GB0005941272": True,  # Baillie Gifford International B Acc (12670.00p -> £126.70)
+    "GB00B6YTYJ18": True,  # BlackRock Cntl European D Inc (3753.44p -> £37.5344)
+    "GB00B7S9KM94": False, # BNY Mellon Gbl Inc Inst W Acc GBP (£4.39)
+    "GB00B8BQG486": False, # BNY Mellon Gbl Inc Inst W Inc GBP (£2.81)
+    "GB00B41YBW71": False, # Fundsmith Equity I Acc (£7.05)
+    "GB00B80QG615": False, # HSBC American Index C Acc (£16.30)
+    "GB00B2Q5DR06": False, # JPM US Select C Acc (£12.59)
+    "GB00B5TGB445": True,  # Jupiter Japan Income I Acc (240.81p -> £2.4081)
+    "GB00B6Y7NF43": True,  # Fidelity ASI W A (3061.00p -> £30.61)
+    "GB00BK35F408": True,  # L&G ProptyFeedr I AE (106.10p -> £1.0610)
+    "GB00B8GG4B61": False, # BNY Mellon RealRtn I W Acc (£1.79)
+    "GB00BG0J2688": True,  # Liontrust Spl Sits I Acc (123.43p -> £1.2343)
+}
+
 def load_portfolio_data(filename="portfolio.json") -> dict:
     with open(filename, 'r') as file:
         return json.load(file)
 
-def scrape_price_from_ft(identifier: str) -> float:
-    """Scrapes live fund prices from FT.com using direct ISIN/Ticker lookup.
-    
-    Dynamically extracts the asset's quote currency wrapper (GBX vs GBP) to 
-    eliminate decimal shifting bugs entirely.
-    """
+def scrape_price_from_ft(identifier: str, isin: str) -> float:
+    """Scrapes raw valuation data and processes scaling based on explicit configuration."""
     for extension in [":GBX", ":GBP"]:
         url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={identifier}{extension}"
         headers = {
@@ -40,8 +65,6 @@ def scrape_price_from_ft(identifier: str) -> float:
                 continue
                 
             soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # 1. Locate the price numeric value
             price_element = soup.find("span", class_="mod-ui-data-list__value")
             if not price_element:
                 price_element = soup.find("span", class_="mod-ui-data-label__value")
@@ -50,30 +73,21 @@ def scrape_price_from_ft(identifier: str) -> float:
                 if main_header:
                     price_element = main_header.find("span")
 
-            # 2. Extract the true quote currency element label from the tearsheet
-            currency_element = soup.find("span", class_="mod-tearsheet-overview__currency")
-            if not currency_element:
-                # Fallback to general data list container currency flags
-                currency_element = soup.find("span", class_="mod-ui-data-list__label")
-                
             if price_element:
                 raw_price = price_element.text.strip().replace(",", "")
+                raw_price = raw_price.lower().replace("gbx", "").replace("p", "").strip()
                 parsed_price = float(raw_price)
                 
-                # Check for explicit currency indicators in the text/labels
-                currency_txt = currency_element.text.upper() if currency_element else ""
-                page_source = response.text.upper()
+                # Apply explicit currency scaling logic based on our static lookup matrix
+                needs_pence_scaling = UK_FUND_CURRENCY_MAP.get(isin, False)
                 
-                # Bbulletproof currency check: If 'GBX' or 'PENCE' is found in key structural locations,
-                # scale it down to standard pounds. Otherwise, treat it natively as GBP.
-                if "GBX" in currency_txt or "PENCE" in currency_txt or "GBX" in price_element.text.upper():
+                # Special safety catch for Vanguard tracking variations
+                if isin == "GB00B4M89245" and parsed_price > 50.0:
                     return round(parsed_price / 100.0, 4)
-                elif "GBX:" in page_source and not "GBP:" in page_source:
+
+                if needs_pence_scaling:
                     return round(parsed_price / 100.0, 4)
                 else:
-                    # Smart conditional threshold for safety boundaries
-                    if parsed_price > 75.0 and identifier in ["GB00B849C803", "GB00BXVMC989", "GB00B84QXT94", "GB00BK35F408", "GB00B5TGB445", "GB00BG0J2688"]:
-                        return round(parsed_price / 100.0, 4)
                     return round(parsed_price, 4)
                 
         except Exception:
@@ -82,7 +96,6 @@ def scrape_price_from_ft(identifier: str) -> float:
     return None
 
 def get_asset_metrics(item: dict) -> dict:
-    """Resolves market metrics prioritizing direct ISIN lookup, with ticker fallback."""
     isin_code = item.get("isin")
     ticker_symbol = item.get("ticker")
     asset_name = item.get("name")
@@ -91,12 +104,12 @@ def get_asset_metrics(item: dict) -> dict:
     
     if isin_code:
         print(f"   -> [Scraper Engine]: Querying via ISIN for: {asset_name} ({isin_code})")
-        ft_price = scrape_price_from_ft(isin_code)
+        ft_price = scrape_price_from_ft(isin_code, isin_code)
         
     if not ft_price and ticker_symbol:
         clean_ticker = ticker_symbol.split('.')[0]
         print(f"   --> [Ticker Retry]: ISIN failed. Querying via Ticker: {clean_ticker}")
-        ft_price = scrape_price_from_ft(clean_ticker)
+        ft_price = scrape_price_from_ft(clean_ticker, isin_code)
 
     if ft_price:
         return {
