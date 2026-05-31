@@ -1,3 +1,4 @@
+import os
 import json
 import time
 import yfinance as yf
@@ -6,19 +7,18 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+# Load API key and environment
 load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+MODEL_ID = "gemini-2.5-flash"
 JSON_FILE = "portfolio.json"
 
 def get_price_on_date(ticker_symbol, target_date):
-    """
-    Fetches price using yfinance with window padding to ensure 
-    we hit a valid trading day.
-    """
+    """Fetches historical close price via yfinance."""
     try:
         ticker = yf.Ticker(ticker_symbol)
         date_obj = datetime.strptime(target_date, "%Y-%m-%d")
-        # Define a 7-day window to catch the nearest trade
+        # Look in a window to handle weekends/holidays
         start_date = (date_obj - timedelta(days=2)).strftime("%Y-%m-%d")
         end_date = (date_obj + timedelta(days=5)).strftime("%Y-%m-%d")
         
@@ -36,7 +36,7 @@ def run_historical_analysis():
     dates = config.get("comparison_dates", {})
     leaderboard = []
     
-    print(f"⏳ Fetching verified market data: {dates['date_a']} ➡️ {dates['date_b']}...")
+    print(f"⏳ Fetching market data: {dates['date_a']} ➡️ {dates['date_b']}...")
     
     for item in config["holdings"]:
         ticker = item.get("ticker")
@@ -46,7 +46,6 @@ def run_historical_analysis():
         p2 = get_price_on_date(ticker, dates['date_b'])
         
         if p1 and p2:
-            # Normalization
             pa = p1 / 100.0 if item["is_pence"] else p1
             pb = p2 / 100.0 if item["is_pence"] else p2
             
@@ -63,9 +62,12 @@ def run_historical_analysis():
 
     leaderboard.sort(key=lambda x: x["growth"], reverse=True)
     
-    # Send to AI
-    prompt = f"Portfolio growth data: {json.dumps(leaderboard)}. Recommend allocation for £{config['cash_balance_gbp']} into top 3."
-    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    prompt = f"Portfolio growth data: {json.dumps(leaderboard)}. Recommend allocation for £{config['cash_balance_gbp']} into top 3 funds."
+    
+    response = client.models.generate_content(
+        model=MODEL_ID, 
+        contents=prompt
+    )
     print("\n=== STRATEGY ===\n", response.text)
 
 if __name__ == "__main__":
