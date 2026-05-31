@@ -19,41 +19,12 @@ api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 MODEL_ID = "gemini-2.5-flash"
 
-# THE SOURCE OF TRUTH CONVERT MATRIX
-# True  = Fund quotes on FT in Pence (Must divide by 100 to get GBP)
-# False = Fund quotes on FT directly in Pounds (Keep exactly as is)
-UK_FUND_CURRENCY_MAP = {
-    "GB00B3VDD431": False, # Artemis Strategic Assets
-    "GB00BBGBFM09": True,  # Fidelity MoneyBuilder Corp Bond
-    "GB00B849C803": True,  # iShares Overseas Govt Bond Index
-    "GB00BXVMC989": True,  # Janus Henderson Fixed Interest
-    "GB00B84QXT94": True,  # L&G All Stocks Global Govt Bond
-    "GB00B4M89245": False, # Vanguard UK Long Duration Gilt (Natively £124.07)
-    "GB00B6R51K64": True,  # Aviva Inv UK Listed Equity
-    "GB00B57H4F11": True,  # Liontrust Special Situations Inc
-    "GB00BV9G3J51": True,  # Ninety One UK Focus
-    "GB00B8Y4ZB91": True,  # Royal London UK Equity Income
-    "GB00B2PLJP95": False, # Artemis SmartGARP Global Equity
-    "GB0005941272": True,  # Baillie Gifford International
-    "GB00B6YTYJ18": True,  # BlackRock Continental European
-    "GB00B7S9KM94": False, # BNY Mellon Global Income Acc
-    "GB00B8BQG486": False, # BNY Mellon Global Income Inc
-    "GB00B41YBW71": False, # Fundsmith Equity
-    "GB00B80QG615": False, # HSBC American Index
-    "GB00B2Q5DR06": False, # JPM US Select
-    "GB00B5TGB445": True,  # Jupiter Japan Income
-    "GB00B6Y7NF43": True,  # Fidelity Asian Special Situations
-    "GB00BK35F408": True,  # L&G Property Feeder
-    "GB00B8GG4B61": False, # BNY Mellon Real Return
-    "GB00BG0J2688": True,  # Liontrust Special Situations Acc
-}
-
 def load_portfolio_data(filename="portfolio.json") -> dict:
     with open(filename, 'r') as file:
         return json.load(file)
 
-def scrape_price_from_ft(identifier: str, isin: str) -> float:
-    """Scrapes raw valuation text numbers, relying cleanly on the configuration map."""
+def scrape_price_from_ft(identifier: str, is_pence: bool) -> float:
+    """Scrapes raw valuation text numbers, relying cleanly on the JSON config flag."""
     for extension in [":GBX", ":GBP"]:
         url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={identifier}{extension}"
         headers = {
@@ -76,14 +47,11 @@ def scrape_price_from_ft(identifier: str, isin: str) -> float:
 
             if price_element:
                 raw_text = price_element.text.strip().replace(",", "")
-                # Pull just the numeric digits and decimal point points safely
                 cleaned_numeric = "".join(c for c in raw_text if c.isdigit() or c == '.')
                 parsed_price = float(cleaned_numeric)
                 
-                # Check our static conversion lookup matrix
-                divide_by_hundred = UK_FUND_CURRENCY_MAP.get(isin, False)
-                
-                if divide_by_hundred:
+                # Use the clean parameter handed down from our JSON file load loop
+                if is_pence:
                     return round(parsed_price / 100.0, 4)
                 else:
                     return round(parsed_price, 4)
@@ -97,17 +65,18 @@ def get_asset_metrics(item: dict) -> dict:
     isin_code = item.get("isin")
     ticker_symbol = item.get("ticker")
     asset_name = item.get("name")
+    is_pence = item.get("is_pence", False)  # Defaults to False if missing
     
     ft_price = None
     
     if isin_code:
         print(f"   -> [Scraper Engine]: Querying via ISIN for: {asset_name} ({isin_code})")
-        ft_price = scrape_price_from_ft(isin_code, isin_code)
+        ft_price = scrape_price_from_ft(isin_code, is_pence)
         
     if not ft_price and ticker_symbol:
         clean_ticker = ticker_symbol.split('.')[0]
         print(f"   --> [Ticker Retry]: ISIN failed. Querying via Ticker: {clean_ticker}")
-        ft_price = scrape_price_from_ft(clean_ticker, isin_code)
+        ft_price = scrape_price_from_ft(clean_ticker, is_pence)
 
     if ft_price:
         return {
