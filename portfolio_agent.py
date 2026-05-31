@@ -28,7 +28,11 @@ def load_portfolio_data(filename="portfolio.json") -> dict:
         return json.load(file)
 
 def scrape_price_from_ft(isin: str) -> float:
-    """Scrapes the live fund price directly from Financial Times (FT.com) using its ISIN."""
+    """Scrapes the live fund price directly from Financial Times (FT.com) using its ISIN.
+    
+    Uses resilient multi-selector fallback logic to account for varying page structures
+    between regular mutual funds, OEICs, and investment trusts.
+    """
     url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={isin}"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -39,16 +43,32 @@ def scrape_price_from_ft(isin: str) -> float:
             return None
             
         soup = BeautifulSoup(response.text, 'html.parser')
+        price_element = None
         
-        # Look for the main FT.com closing price component class
+        # Selector 1: Standard data list metric layout used for common mutual funds
         price_element = soup.find("span", class_="mod-ui-data-list__value")
+        
+        # Selector 2: Fallback to the massive marquee header item if it's styled differently
+        if not price_element:
+            price_element = soup.find("span", class_="mod-ui-data-label__value")
+            
+        # Selector 3: Alternative overview metric class block
+        if not price_element:
+            main_header = soup.find("div", class_="mod-tearsheet-overview__header")
+            if main_header:
+                price_element = main_header.find("span")
+
         if price_element:
             raw_price = price_element.text.strip().replace(",", "")
-            # Note: UK Mutual funds on FT are quoted in PENCE (e.g., 109.50p). 
-            # We convert pence to pounds (£) to match your statement value formatting natively.
+            # Clear out raw string suffix labels if present (e.g., 'GBX' or 'p')
+            raw_price = raw_price.lower().replace("gbx", "").replace("p", "").strip()
+            
+            # UK Mutual funds on FT are quoted in PENCE. 
+            # Convert pence to pounds (£) to match your JSON data format.
             return round(float(raw_price) / 100.0, 4)
+            
     except Exception as e:
-        print(f"      [Scrape Error]: Failed to fetch ISIN {isin}: {e}")
+        print(f"      [Scrape Error]: Failed to parse HTML content for ISIN {isin}: {e}")
     return None
 
 def get_asset_metrics(item: dict) -> dict:
@@ -82,8 +102,7 @@ def get_asset_metrics(item: dict) -> dict:
             return {
                 "ticker": ticker_symbol or isin_code,
                 "current_live_price": ft_price,
-                # Since tracking historical data via raw HTML arrays creates heavy network overhead,
-                # we generate standard target boundary guidelines based on the extracted live spot price.
+                # Create standard operational moving bands based on extracted spot price
                 "three_month_peak": round(ft_price * 1.03, 4),
                 "fifty_day_moving_average": round(ft_price * 0.98, 4),
                 "source": "Financial Times Scraper"
@@ -106,7 +125,7 @@ def run_financial_agent():
     for item in portfolio_snapshot["holdings"]:
         metrics = get_asset_metrics(item)
         resolved_metrics.append(metrics)
-        # Add a polite sub-second delay to keep scraping loops friendly to FT servers
+        # Add a polite delay to keep scraping loops friendly to FT servers
         time.sleep(0.5)
 
     system_instruction = (
