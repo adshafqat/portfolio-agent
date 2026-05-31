@@ -24,7 +24,7 @@ def load_portfolio_data(filename="portfolio.json") -> dict:
         return json.load(file)
 
 def scrape_price_from_ft(identifier: str) -> float:
-    """Scrapes raw valuation numbers and uses a reliable structural fallback to convert GBX to GBP."""
+    """Scrapes raw valuation data directly from the available FT endpoint summaries."""
     for extension in [":GBX", ":GBP"]:
         url = f"https://markets.ft.com/data/funds/tearsheet/summary?s={identifier}{extension}"
         headers = {
@@ -48,14 +48,7 @@ def scrape_price_from_ft(identifier: str) -> float:
             if price_element:
                 raw_text = price_element.text.strip().replace(",", "")
                 cleaned_numeric = "".join(c for c in raw_text if c.isdigit() or c == '.')
-                parsed_price = float(cleaned_numeric)
-                
-                # Structural check: if the price comes from a GBX endpoint and is a raw three/four-digit figure,
-                # it represents pence values (e.g., 163.0p or 1418.0p) and must be converted to GBP.
-                if extension == ":GBX" and parsed_price > 10.0:
-                    return round(parsed_price / 100.0, 4)
-                    
-                return round(parsed_price, 4)
+                return round(float(cleaned_numeric), 4)
                 
         except Exception:
             pass
@@ -110,13 +103,13 @@ def run_financial_agent():
         resolved_metrics.append(metrics)
         time.sleep(0.5)
 
-system_instruction = (
+    system_instruction = (
         "You are an expert personal financial optimization agent. Your objective is to look at a "
         "user's asset balance data, review current pricing performance metrics, and compile "
         "a highly objective investment balancing report.\n\n"
         "CRITICAL CURRENCY CONFIGURATION:\n"
         "The following funds are quoted by the scraper engine in PENCE (GBX). You MUST divide their "
-        "current_live_price by 100 to convert them to GBP before calculating Current Value:\n"
+        "current_live_price by 100 to convert them to GBP (£) before calculating Current Value:\n"
         "- Fidelity MnyBldCrpBd W Acc GBP\n"
         "- iShares Osea GovBdIdx(UK) D A\n"
         "- Janus Henderson FxdIntMthIn I A\n"
@@ -132,18 +125,23 @@ system_instruction = (
         "- Fidelity ASI W A\n"
         "- L&G ProptyFeedr I AE\n"
         "- Liontrust Spl Sits I Acc\n\n"
-        "All other funds (like Artemis, Fundsmith, HSBC, BNY Mellon, JPM) are already in GBP (£) and do not need division.\n"
-        "Calculate the current value of each holding by multiplying Shares Owned by the calculated GBP Price exactly, "
-        "and sum them precisely along with the cash balance to find the true Total Portfolio Value."
+        "All other funds (such as Artemis Strategic Assets I Acc, Fundsmith Equity I Acc, "
+        "Artemis SmrtSARPGlbEq I Acc, BNY Mellon Gbl Inc Inst W Acc GBP, BNY Mellon Gbl Inc Inst W Inc GBP, "
+        "HSBC American Index C Acc, JPM US Select C Acc, and BNY Mellon RealRtn I W Acc) are already extracted "
+        "in GBP (£) format and must NOT be divided by 100.\n\n"
+        "EXECUTION RULES:\n"
+        "1. Calculate the current value of each holding by multiplying Shares Owned by the properly normalized GBP Price exactly.\n"
+        "2. Do not arbitrarily adjust decimals or try to guess alternative pricing baselines beyond these instructions.\n"
+        "3. Sum the calculated values precisely along with the cash balance to find the true Total Portfolio Value."
     )
     
     user_prompt = (
         f"Review my complete portfolio holdings matrix: {portfolio_snapshot}.\n"
         f"Here are the processed performance metrics for each asset: {resolved_metrics}.\n"
-        f"1. Present the data clearly in a markdown table showing total portfolio valuation calculations.\n"
+        f"1. Present the data clearly in a markdown table showing total portfolio valuation calculations (Name, ISIN, Shares Owned, Current Price in GBP, and Current Value in GBP).\n"
         f"2. Provide 3 highly specific, actionable options for deploying my available cash balance of exactly "
         f"£{portfolio_snapshot['cash_balance_gbp']:,} into my current holdings based on their performance metrics.\n"
-        f"   - Each option must calculate the EXACT number of whole shares/units to purchase based on the current price, "
+        f"   - Each option must calculate the EXACT number of whole shares/units to purchase based on the normalized GBP price, "
         f"the total cost of those units, and the remaining cash balance left over.\n"
         f"Output everything in a beautifully structured markdown report."
     )
