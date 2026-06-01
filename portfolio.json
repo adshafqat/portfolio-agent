@@ -5,35 +5,35 @@
       "isin": "GB00B3VDD431",
       "ticker": "0P00014H4E.L",
       "name": "Artemis Strategic Assets I Acc",
-      "shares_owned": 23259.236,
+      "shares_owned": 23259.2360,
       "is_pence": false
     },
     {
       "isin": "GB00BBGBFM09",
       "ticker": "0P00014H5F.L",
       "name": "Fidelity MnyBldCrpBd W Acc GBP",
-      "shares_owned": 115.4,
+      "shares_owned": 115.4000,
       "is_pence": true
     },
     {
       "isin": "GB00B849C803",
       "ticker": "0P0000X97G.L",
       "name": "iShares Osea GovBdIdx(UK) D A",
-      "shares_owned": 832.584,
+      "shares_owned": 832.5840,
       "is_pence": true
     },
     {
       "isin": "GB00BXVMC989",
       "ticker": "0P0000X87F.L",
       "name": "Janus Henderson FxdIntMthIn I A",
-      "shares_owned": 943.25,
+      "shares_owned": 943.2500,
       "is_pence": true
     },
     {
       "isin": "GB00B84QXT94",
       "ticker": "0P0000X08G.L",
       "name": "L&G All StocksGblGvBdIdx Tst I Acc",
-      "shares_owned": 625.157,
+      "shares_owned": 625.1570,
       "is_pence": true
     },
     {
@@ -47,21 +47,21 @@
       "isin": "GB00B6R51K64",
       "ticker": "0P0000S6A1.L",
       "name": "Aviva Inv UK Listed Eq Inc 2 Acc",
-      "shares_owned": 185.584,
+      "shares_owned": 185.5840,
       "is_pence": true
     },
     {
       "isin": "GB00B57H4F11",
       "ticker": "0P0000S3D8.L",
       "name": "Liontrust Spl Sits I Inc",
-      "shares_owned": 502.576,
+      "shares_owned": 502.5760,
       "is_pence": true
     },
     {
       "isin": "GB00BV9G3J51",
       "ticker": "0P0000S5L9.L",
       "name": "Ninety One UK Focsh I Acc",
-      "shares_owned": 317.939,
+      "shares_owned": 317.9390,
       "is_pence": true
     },
     {
@@ -75,91 +75,91 @@
       "isin": "GB00B2PLJP95",
       "ticker": "0P00014R0U.L",
       "name": "Artemis SmrtSARPGlbEq I Acc",
-      "shares_owned": 111.29,
+      "shares_owned": 111.2900,
       "is_pence": false
     },
     {
       "isin": "GB0005941272",
       "ticker": "0P00000B29.L",
       "name": "Baillie Gifford International B Acc",
-      "shares_owned": 4.955,
+      "shares_owned": 4.9550,
       "is_pence": true
     },
     {
       "isin": "GB00B6YTYJ18",
       "ticker": "0P0000S0T5.L",
       "name": "BlackRock Cntl European D Inc",
-      "shares_owned": 192.654,
+      "shares_owned": 192.6540,
       "is_pence": true
     },
     {
       "isin": "GB00B7S9KM94",
       "ticker": "0P0000X6D2.L",
       "name": "BNY Mellon Gbl Inc Inst W Acc GBP",
-      "shares_owned": 1468.02,
+      "shares_owned": 1468.0200,
       "is_pence": false
     },
     {
       "isin": "GB00B8BQG486",
       "ticker": "0P0000VXQ2.L",
       "name": "BNY Mellon Gbl Inc Inst W Inc GBP",
-      "shares_owned": 40.719,
+      "shares_owned": 40.7190,
       "is_pence": false
     },
     {
       "isin": "GB00B41YBW71",
       "ticker": "0P0000W278.L",
       "name": "Fundsmith Equity I Acc",
-      "shares_owned": 385.54,
+      "shares_owned": 385.5400,
       "is_pence": false
     },
     {
       "isin": "GB00B80QG615",
       "ticker": "0P0000W3G4.L",
       "name": "HSBC American Index C Acc",
-      "shares_owned": 595.42,
+      "shares_owned": 595.4200,
       "is_pence": false
     },
     {
       "isin": "GB00B2Q5DR06",
       "ticker": "0P0000S706.L",
       "name": "JPM US Select C Acc",
-      "shares_owned": 427.293,
+      "shares_owned": 427.2930,
       "is_pence": false
     },
     {
       "isin": "GB00B5TGB445",
       "ticker": "0P0000S3Q1.L",
       "name": "Jupiter Japan Income I Acc",
-      "shares_owned": 495.89,
+      "shares_owned": 495.8900,
       "is_pence": true
     },
     {
       "isin": "GB00B6Y7NF43",
       "ticker": "0P00017XCD.L",
       "name": "Fidelity ASI W A",
-      "shares_owned": 208.52,
+      "shares_owned": 208.5200,
       "is_pence": true
     },
     {
       "isin": "GB00BK35F408",
       "ticker": "0P000185IK.L",
       "name": "L&G ProptyFeedr I AE",
-      "shares_owned": 2906.909,
+      "shares_owned": 2906.9090,
       "is_pence": true
     },
     {
       "isin": "GB00B8GG4B61",
       "ticker": "0P0000WZ06.L",
       "name": "BNY Mellon RealRtn I W Acc",
-      "shares_owned": 779.582,
+      "shares_owned": 779.5820,
       "is_pence": false
     },
     {
       "isin": "GB00BG0J2688",
       "ticker": "0P0000S3DG.L",
       "name": "Liontrust Spl Sits I Acc",
-      "shares_owned": 378.158,
+      "shares_owned": 378.1580,
       "is_pence": true
     }
   ]
